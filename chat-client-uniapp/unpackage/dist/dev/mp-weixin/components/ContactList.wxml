@@ -1,0 +1,1 @@
+<view class="contact-list"><view wx:for="{{a}}" wx:for-item="user" wx:key="b" class="{{['contact-item', user.c]}}" bindtap="{{user.d}}">{{user.a}}</view></view>

@@ -1,0 +1,18 @@
+
+.contact-list {
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  padding: 10px;
+  background: #f9f9f9;
+}
+.contact-item {
+  margin-right: 15px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  background: #eee;
+  cursor: pointer;
+}
+.contact-item.active {
+  background: #007AFF;
+  color: white;
+}
