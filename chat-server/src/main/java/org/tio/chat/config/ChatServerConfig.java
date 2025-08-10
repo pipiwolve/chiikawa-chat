@@ -6,7 +6,7 @@ public abstract class ChatServerConfig {
     /**
      * 协议名字(可以随便取，主要用于开发人员辨识)
      */
-    public static final String PROTOCOL_NAME = "showcase";
+    public static final String PROTOCOL_NAME = "Chiikawa-Chat-Server";
     public static final String CHARSET = "utf-8";
     /**
      * 监听的ip

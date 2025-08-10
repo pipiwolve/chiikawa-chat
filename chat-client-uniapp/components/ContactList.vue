@@ -1,4 +1,5 @@
 <template>
+
   <view class="contact-list">
     <view
         v-for="user in users"
@@ -9,6 +10,7 @@
       {{ user.name }}
     </view>
   </view>
+
 </template>
 
 <script>
@@ -25,6 +27,11 @@ export default {
   }
 }
 </script>
+
+
+
+
+
 
 <style>
 .contact-list {

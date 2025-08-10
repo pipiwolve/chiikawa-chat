@@ -1,4 +1,5 @@
 <template>
+
   <view class="chat-container">
     <ContactList 
       :users="contacts" 
@@ -17,6 +18,7 @@
       <button @click="sendMsg">发送</button>
     </view>
   </view>
+
 </template>
 
 <script>

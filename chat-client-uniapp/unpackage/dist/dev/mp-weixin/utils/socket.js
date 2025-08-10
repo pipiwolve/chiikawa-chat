@@ -6,10 +6,10 @@ function connectSocket(userId, onMessage) {
     url: "ws://192.168.110.238:9326",
     // 请替换成你的局域网IP和端口
     success() {
-      common_vendor.index.__f__("log", "at utils/socket.js:7", "✅ WebSocket 连接成功");
+      common_vendor.index.__f__("log", "at utils/socket.js:7", " WebSocket 连接成功");
     },
     fail(err) {
-      common_vendor.index.__f__("error", "at utils/socket.js:10", "❌ WebSocket 连接失败", err);
+      common_vendor.index.__f__("error", "at utils/socket.js:10", " WebSocket 连接失败", err);
     }
   });
   socketTask.onOpen(() => {

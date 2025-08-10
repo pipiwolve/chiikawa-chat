@@ -4,10 +4,10 @@ export function connectSocket(userId, onMessage) {
     socketTask = uni.connectSocket({
         url: 'ws://192.168.110.238:9326', // 请替换成你的局域网IP和端口
         success() {
-            console.log('✅ WebSocket 连接成功');
+            console.log(' WebSocket 连接成功');
         },
         fail(err) {
-            console.error('❌ WebSocket 连接失败', err);
+            console.error(' WebSocket 连接失败', err);
         }
     });
 
@@ -53,5 +53,6 @@ export function sendMsg(toUserId, msg, fromUserId) {
         message: msg,
         timestamp: Date.now()
     };
+    // 后端处理json格式，所以通过JSON.stringify()将js对象格式转为json
     socketTask.send({ data: JSON.stringify(data) });
 }
