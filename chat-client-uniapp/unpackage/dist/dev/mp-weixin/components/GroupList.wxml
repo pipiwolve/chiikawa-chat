@@ -1,0 +1,1 @@
+<view class="group-list data-v-804895da"><view wx:for="{{a}}" wx:for-item="group" wx:key="b" class="{{['data-v-804895da', 'group-item', group.c]}}" bindtap="{{group.d}}">{{group.a}}</view></view>

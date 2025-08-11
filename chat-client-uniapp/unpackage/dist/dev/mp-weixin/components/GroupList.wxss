@@ -1,0 +1,17 @@
+
+.group-list.data-v-804895da {
+  padding: 10px;
+  border-top: 1px solid #eee;
+  background-color: #fafafa;
+}
+.group-item.data-v-804895da {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+  font-weight: normal;
+  cursor: pointer;
+}
+.group-item.selected.data-v-804895da {
+  background-color: #007aff;
+  color: white;
+  font-weight: bold;
+}

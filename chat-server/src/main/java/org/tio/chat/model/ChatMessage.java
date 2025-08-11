@@ -47,7 +47,7 @@ public class ChatMessage implements Serializable {
      * - 使用 @JsonAlias 接收 "text"、"message" 等常见名称，
      *   这样前端如果发送 { "text": "..." } 或 { "message": "..." } 都能被正确解析。
      */
-    @JsonAlias({ "text", "message", "msg" })
+    @JsonAlias({ "text", "message", "msg" ,"sysMsg"})
     private String message;
 
     /** 时间戳（毫秒） */
