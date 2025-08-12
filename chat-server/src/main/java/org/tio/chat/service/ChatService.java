@@ -73,11 +73,8 @@ public class ChatService {
         if (userId == null) {
             return new ArrayList<>();
         }
-
         List<ChatMessage> list = offlineMsgMap.get(userId);
-        System.out.println(list);
         return list;
-
     }
 
     /**
@@ -86,6 +83,25 @@ public class ChatService {
     public static void markOfflineMessagesRead(String userId) {
         if (userId != null) {
             offlineMsgMap.remove(userId);
+        }
+    }
+
+    /**
+     * 处理客户端ACK确认，前端确认已收到消息后调用此接口
+     */
+    public static void processClientAck(String msgId, String userId) {
+        if (msgId == null || userId == null) {
+            return;
+        }
+        List<ChatMessage> msgList = offlineMsgMap.get(userId);
+        if (msgList != null) {
+            msgList.removeIf(msg -> msgId.equals(msg.getMsgId()));
+            // 更新缓存
+            if (msgList.isEmpty()) {
+                offlineMsgMap.remove(userId);
+            } else {
+                offlineMsgMap.put(userId, msgList);
+            }
         }
     }
 }

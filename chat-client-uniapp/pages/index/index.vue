@@ -3,7 +3,6 @@
     <text>请选择登录用户：</text>
     <button @click="goChat('user1')">用户一</button>
     <button @click="goChat('user2')">用户二</button>
-    <button @click="goChat('user3')">用户三</button>
   </view>
 </template>
 

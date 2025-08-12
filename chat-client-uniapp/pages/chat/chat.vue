@@ -16,8 +16,14 @@
 
     <!-- 消息列表 -->
     <scroll-view scroll-y class="msg-list" :scroll-top="scrollTop" @scrolltolower="loadMoreMessages">
-      <view v-for="(item, index) in messages" :key="index"
-            :class="['msg-item', item.from === userId ? 'msg-sent' : 'msg-received']">
+      <view v-for="(item, index) in messages" :key="item.msgId || index"
+            :class="[
+              'msg-item',
+              item.from === userId ? 'msg-sent' : 'msg-received',
+              item.isOffline ? 'offline-msg' : '',
+              item.status === 'sending' ? 'msg-sending' : '',
+              item.status === 'failed' ? 'msg-failed' : ''
+            ]">
         <view class="msg-nickname">{{ item.nickname || item.from }}</view>
         <view class="msg-content">{{ item.message }}</view>
         <view class="msg-timestamp">{{ formatTimestamp(item.timestamp) }}</view>
@@ -49,7 +55,7 @@
 </template>
 
 <script>
-import { connectSocket, sendMsg, sendGroupMsg, isConnected, closeSocket } from '@/utils/socket.js'
+import {connectSocket, sendMsg, sendGroupMsg, isConnected, closeSocket} from '@/utils/socket.js'
 import ContactList from '@/components/ContactList.vue'
 import GroupList from '@/components/GroupList.vue'
 
@@ -74,9 +80,11 @@ export default {
       ],
       connectionStatus: '未连接',
       scrollTop: 0, // 用于消息滚动控制
+      msgStatusMap: {}, // 存放消息发送状态，key为msgId，value为'sending'|'success'|'failed'
     }
   },
   onLoad(options) {
+    // 路由参数提取
     this.userId = options.userId || 'user1'
     console.log('[页面加载] 当前用户ID:', this.userId)
     // 默认选中联系人或群组中非自己的第一个
@@ -84,17 +92,24 @@ export default {
     this.connectionStatus = '连接中...'
 
     connectSocket(this.userId, (msg) => {
-      console.log('[WebSocket] 收到消息:', msg)
+      console.log('[WebSocket] 收到消息:', msg);
       // 这里的 msg 可能是一条消息，也可能是服务端批量发送的消息数组
       if (Array.isArray(msg)) {
-        // 批量离线消息，追加到 messages 列表
-        this.messages.push(...msg);
+        // 批量离线消息，追加到 messages 列表，并标记 isOffline
+        const offlineMsgs = msg.map(m => ({ ...m, isOffline: true }));
+        this.messages.push(...offlineMsgs);
       } else {
-        // 单条实时消息
-        this.messages.push(msg);
+        // 单条实时消息，避免重复添加自己发送的消息
+        const existingIdx = this.messages.findIndex(m => m.msgId === msg.msgId);
+        if (existingIdx !== -1) {
+          // 更新已有消息（如状态等）
+          this.messages[existingIdx] = { ...this.messages[existingIdx], ...msg };
+        } else {
+          // 新消息，加入列表
+          this.messages.push({ ...msg, isOffline: false });
+        }
       }
 
-      // 滚动到底部，显示最新消息
       this.$nextTick(() => {
         this.scrollTop = 100000;
       });
@@ -110,6 +125,7 @@ export default {
     }, 1000)
   },
   methods: {
+    // 发送消息方法，支持发送状态回调更新
     sendMsg() {
       if (!this.inputMsg) return
 
@@ -121,23 +137,44 @@ export default {
       }
       console.log('[发送] 目标:', this.targetId, '消息:', this.inputMsg)
 
-      if (target.type === 'user') {
-        sendMsg(this.targetId, this.inputMsg, this.userId)
-      } else if (target.type === 'group') {
-        sendGroupMsg(this.targetId, this.inputMsg, this.userId)
-      }
+      // 生成唯一消息ID，避免渲染重复和状态匹配问题
+      const msgId = 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 10000)
 
-      // 本地先添加消息（发送者自己） - 使用统一的 ChatMessage 格式
-      this.messages.push({
-        cmd: target.type === 'user' ? 2 : 3,
-        type: target.type,
+      // 创建消息对象，添加到消息列表，状态初始为sending
+      const newMsg = {
+        msgId,
         from: this.userId,
         to: this.targetId,
         message: this.inputMsg,
-        timestamp: new Date().getTime()
-      })
+        status: 'sending',
+        isOffline: false,
+        timestamp: Date.now(),
+        type: target.type,
+        nickname: this.contacts.find(c => c.id === this.userId)?.name || this.userId
+      };
+      this.messages.push(newMsg);
 
-      console.log('[发送] 本地消息列表长度:', this.messages.length)
+      // 发送消息，传入状态更新回调，动态更新消息发送状态
+      if (target.type === 'user') {
+        // ----状态动态回调逻辑----
+        sendMsg(this.targetId, this.inputMsg, this.userId, (status) => {
+          // status 为'sending'|'success'|'failed'
+          this.msgStatusMap[msgId] = status
+          // 更新对应消息的状态字段，触发视图刷新
+          const idx = this.messages.findIndex(m => m.msgId === msgId);
+          if (idx !== -1) {
+            this.messages[idx].status = status;
+          }
+        })
+      } else if (target.type === 'group') {
+        sendGroupMsg(this.targetId, this.inputMsg, this.userId, (status) => {
+          this.msgStatusMap[msgId] = status
+          const idx = this.messages.findIndex(m => m.msgId === msgId);
+          if (idx !== -1) {
+            this.messages[idx].status = status;
+          }
+        })
+      }
 
       this.inputMsg = ''
 
@@ -146,6 +183,7 @@ export default {
       })
     },
 
+    // 选择聊天对象，切换聊天目标
     handleSelectUser(id) {
       this.targetId = id
       console.log('[切换聊天对象] 目标ID:', id)
@@ -153,6 +191,7 @@ export default {
       this.messages = []
     },
 
+    // 滚动到底部，加载更多消息（占位）
     loadMoreMessages() {
       // TODO: 实现消息分页加载
       console.log('滚动到底部，加载更多消息')
@@ -164,12 +203,39 @@ export default {
       console.log('手动断开 WebSocket 连接')
     },
 
+    // 格式化时间戳为 HH:mm 格式
     formatTimestamp(ts) {
       if (!ts) return '';
       const date = new Date(ts);
       const h = date.getHours().toString().padStart(2, '0');
       const m = date.getMinutes().toString().padStart(2, '0');
       return `${h}:${m}`;
+    },
+
+    // 重试发送失败的消息，更新状态
+    retrySend(index) {
+      const msg = this.messages[index];
+      if (!msg.msgId) {
+        uni.showToast({title: '无法重发：缺少msgId', icon: 'none'});
+        return;
+      }
+      // 设置状态为发送中
+      this.messages[index].status = 'sending';
+      this.msgStatusMap[msg.msgId] = 'sending';
+
+      // 重新发送消息，传入回调更新状态
+      // 这里假设retrySend是sendMsg的重发逻辑，直接调用sendMsg接口
+      if (msg.type === 'user') {
+        sendMsg(msg.to, msg.message, msg.from, (status) => {
+          this.msgStatusMap[msg.msgId] = status;
+          this.messages[index].status = status;
+        })
+      } else if (msg.type === 'group') {
+        sendGroupMsg(msg.to, msg.message, msg.from, (status) => {
+          this.msgStatusMap[msg.msgId] = status;
+          this.messages[index].status = status;
+        })
+      }
     }
   }
 }
@@ -209,6 +275,22 @@ export default {
   align-self: flex-start;
   background-color: #FFF;
   border: 1px solid #ddd;
+}
+
+/* 离线消息样式 */
+.offline-msg {
+  border-left: 4px solid #ff9800;
+  background-color: #fff8e1;
+}
+
+/* 发送中消息样式，半透明 */
+.msg-sending {
+  opacity: 0.7;
+}
+
+/* 发送失败消息样式，红色字体 */
+.msg-failed {
+  color: red;
 }
 
 .msg-nickname {
@@ -252,6 +334,7 @@ export default {
   color: #888;
   margin-top: 2px;
 }
+
 .msg-status button {
   margin-left: 6px;
   font-size: 12px;

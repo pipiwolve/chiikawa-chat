@@ -23,22 +23,30 @@ const _sfc_main = {
         { id: "group2", name: "群聊2", type: "group" }
       ],
       connectionStatus: "未连接",
-      scrollTop: 0
+      scrollTop: 0,
       // 用于消息滚动控制
+      msgStatusMap: {}
+      // 存放消息发送状态，key为msgId，value为'sending'|'success'|'failed'
     };
   },
   onLoad(options) {
     var _a;
     this.userId = options.userId || "user1";
-    common_vendor.index.__f__("log", "at pages/chat/chat.vue:81", "[页面加载] 当前用户ID:", this.userId);
+    common_vendor.index.__f__("log", "at pages/chat/chat.vue:89", "[页面加载] 当前用户ID:", this.userId);
     this.targetId = ((_a = this.contacts.concat(this.groups).find((c) => c.id !== this.userId)) == null ? void 0 : _a.id) || "";
     this.connectionStatus = "连接中...";
     utils_socket.connectSocket(this.userId, (msg) => {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:87", "[WebSocket] 收到消息:", msg);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:95", "[WebSocket] 收到消息:", msg);
       if (Array.isArray(msg)) {
-        this.messages.push(...msg);
+        const offlineMsgs = msg.map((m) => ({ ...m, isOffline: true }));
+        this.messages.push(...offlineMsgs);
       } else {
-        this.messages.push(msg);
+        const existingIdx = this.messages.findIndex((m) => m.msgId === msg.msgId);
+        if (existingIdx !== -1) {
+          this.messages[existingIdx] = { ...this.messages[existingIdx], ...msg };
+        } else {
+          this.messages.push({ ...msg, isOffline: false });
+        }
       }
       this.$nextTick(() => {
         this.scrollTop = 1e5;
@@ -47,13 +55,15 @@ const _sfc_main = {
     setInterval(() => {
       const status = utils_socket.isConnected() ? "已连接" : "未连接";
       if (this.connectionStatus !== status) {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:107", "[连接状态] 状态变化:", status);
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:122", "[连接状态] 状态变化:", status);
       }
       this.connectionStatus = status;
     }, 1e3);
   },
   methods: {
+    // 发送消息方法，支持发送状态回调更新
     sendMsg() {
+      var _a;
       if (!this.inputMsg)
         return;
       const target = this.contacts.concat(this.groups).find((c) => c.id === this.targetId);
@@ -61,39 +71,58 @@ const _sfc_main = {
         common_vendor.index.showToast({ title: "请选择联系人或群组", icon: "none" });
         return;
       }
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:122", "[发送] 目标:", this.targetId, "消息:", this.inputMsg);
-      if (target.type === "user") {
-        utils_socket.sendMsg(this.targetId, this.inputMsg, this.userId);
-      } else if (target.type === "group") {
-        utils_socket.sendGroupMsg(this.targetId, this.inputMsg, this.userId);
-      }
-      this.messages.push({
-        cmd: target.type === "user" ? 2 : 3,
-        type: target.type,
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:138", "[发送] 目标:", this.targetId, "消息:", this.inputMsg);
+      const msgId = "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1e4);
+      const newMsg = {
+        msgId,
         from: this.userId,
         to: this.targetId,
         message: this.inputMsg,
-        timestamp: (/* @__PURE__ */ new Date()).getTime()
-      });
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:140", "[发送] 本地消息列表长度:", this.messages.length);
+        status: "sending",
+        isOffline: false,
+        timestamp: Date.now(),
+        type: target.type,
+        nickname: ((_a = this.contacts.find((c) => c.id === this.userId)) == null ? void 0 : _a.name) || this.userId
+      };
+      this.messages.push(newMsg);
+      if (target.type === "user") {
+        utils_socket.sendMsg(this.targetId, this.inputMsg, this.userId, (status) => {
+          this.msgStatusMap[msgId] = status;
+          const idx = this.messages.findIndex((m) => m.msgId === msgId);
+          if (idx !== -1) {
+            this.messages[idx].status = status;
+          }
+        });
+      } else if (target.type === "group") {
+        utils_socket.sendGroupMsg(this.targetId, this.inputMsg, this.userId, (status) => {
+          this.msgStatusMap[msgId] = status;
+          const idx = this.messages.findIndex((m) => m.msgId === msgId);
+          if (idx !== -1) {
+            this.messages[idx].status = status;
+          }
+        });
+      }
       this.inputMsg = "";
       this.$nextTick(() => {
         this.scrollTop = 1e5;
       });
     },
+    // 选择聊天对象，切换聊天目标
     handleSelectUser(id) {
       this.targetId = id;
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:151", "[切换聊天对象] 目标ID:", id);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:189", "[切换聊天对象] 目标ID:", id);
       this.messages = [];
     },
+    // 滚动到底部，加载更多消息（占位）
     loadMoreMessages() {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:158", "滚动到底部，加载更多消息");
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:197", "滚动到底部，加载更多消息");
     },
     // 关闭连接操作
     disconnect() {
       utils_socket.closeSocket();
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:164", "手动断开 WebSocket 连接");
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:203", "手动断开 WebSocket 连接");
     },
+    // 格式化时间戳为 HH:mm 格式
     formatTimestamp(ts) {
       if (!ts)
         return "";
@@ -101,6 +130,27 @@ const _sfc_main = {
       const h = date.getHours().toString().padStart(2, "0");
       const m = date.getMinutes().toString().padStart(2, "0");
       return `${h}:${m}`;
+    },
+    // 重试发送失败的消息，更新状态
+    retrySend(index) {
+      const msg = this.messages[index];
+      if (!msg.msgId) {
+        common_vendor.index.showToast({ title: "无法重发：缺少msgId", icon: "none" });
+        return;
+      }
+      this.messages[index].status = "sending";
+      this.msgStatusMap[msg.msgId] = "sending";
+      if (msg.type === "user") {
+        utils_socket.sendMsg(msg.to, msg.message, msg.from, (status) => {
+          this.msgStatusMap[msg.msgId] = status;
+          this.messages[index].status = status;
+        });
+      } else if (msg.type === "group") {
+        utils_socket.sendGroupMsg(msg.to, msg.message, msg.from, (status) => {
+          this.msgStatusMap[msg.msgId] = status;
+          this.messages[index].status = status;
+        });
+      }
     }
   }
 };
@@ -132,10 +182,13 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
       }, item.status === "sending" ? {} : {}, {
         f: item.status === "failed"
       }, item.status === "failed" ? {
-        g: common_vendor.o(($event) => _ctx.retrySend(index), index)
+        g: common_vendor.o(($event) => $options.retrySend(index), item.msgId || index)
       } : {}) : {}, {
-        h: index,
-        i: common_vendor.n(item.from === $data.userId ? "msg-sent" : "msg-received")
+        h: item.msgId || index,
+        i: common_vendor.n(item.from === $data.userId ? "msg-sent" : "msg-received"),
+        j: common_vendor.n(item.isOffline ? "offline-msg" : ""),
+        k: common_vendor.n(item.status === "sending" ? "msg-sending" : ""),
+        l: common_vendor.n(item.status === "failed" ? "msg-failed" : "")
       });
     }),
     f: $data.scrollTop,

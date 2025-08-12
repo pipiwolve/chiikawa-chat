@@ -53,6 +53,9 @@ public class ChatMessage implements Serializable {
     /** 时间戳（毫秒） */
     private Long timestamp;
 
+    /** 消息唯一标识 */
+    private String msgId;
+
     public ChatMessage() {
     }
 
@@ -149,6 +152,14 @@ public class ChatMessage implements Serializable {
         this.timestamp = timestamp;
     }
 
+    public String getMsgId() {
+        return msgId;
+    }
+
+    public void setMsgId(String msgId) {
+        this.msgId = msgId;
+    }
+
     @Override
     public String toString() {
         return "ChatMessage{" +
@@ -159,6 +170,7 @@ public class ChatMessage implements Serializable {
                 ", nickname='" + nickname + '\'' +
                 ", message='" + message + '\'' +
                 ", timestamp=" + timestamp +
+                ", msgId='" + msgId + '\'' +
                 '}';
     }
 }

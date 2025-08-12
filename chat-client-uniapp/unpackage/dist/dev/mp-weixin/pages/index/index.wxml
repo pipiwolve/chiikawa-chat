@@ -1,1 +1,1 @@
-<view class="container"><text>请选择登录用户：</text><button bindtap="{{a}}">用户一</button><button bindtap="{{b}}">用户二</button><button bindtap="{{c}}">用户三</button></view>
+<view class="container"><text>请选择登录用户：</text><button bindtap="{{a}}">用户一</button><button bindtap="{{b}}">用户二</button></view>
