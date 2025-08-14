@@ -1,13 +1,17 @@
 package org.tio.chat.service;
 
+import org.tio.chat.starter.ChatServerStarter;
 import org.tio.core.ChannelContext;
 import org.tio.core.Tio;
+import org.tio.core.TioConfig;
+import org.tio.server.TioServerConfig;
 import org.tio.websocket.common.WsResponse;
 import org.tio.chat.model.ChatMessage;
 import org.tio.chat.util.JsonUtil;
 import org.tio.chat.config.ChatServerConfig;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -16,8 +20,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ChatService {
 
+    // 提取全局配置
+    private static TioServerConfig config = ChatServerStarter.getTioServerConfig();
+
     // 离线消息缓存，key: 用户ID，value: 离线消息列表
     private static final ConcurrentHashMap<String, List<ChatMessage>> offlineMsgMap = new ConcurrentHashMap<>();
+
+    // key: msgId, value: ChatMessage
+    private static final ConcurrentHashMap<String, ChatMessage> onlineMsgMap = new ConcurrentHashMap<>();
 
     /**
      * 绑定用户并加入默认群组（如 "group1"）
@@ -67,6 +77,17 @@ public class ChatService {
     }
 
     /**
+     * 存储在线信息
+     * */
+    public static void saveOnlineMessage(ChatMessage msg, ChannelContext channelContext) {
+        if (msg != null && msg.getMsgId() != null && channelContext != null) {
+            // 绑定当前连接上下文
+            msg.setChannelContext(channelContext);
+            onlineMsgMap.put(msg.getMsgId(), msg);
+        }
+    }
+
+    /**
      * 查询指定用户所有离线消息
      */
     public static List<ChatMessage> getOfflineMessages(String userId) {
@@ -104,4 +125,53 @@ public class ChatService {
             }
         }
     }
-}
+
+
+    /**
+     * 处理已读确认，更新消息的read字段，并向发送方推送已读通知
+     */
+    public static void processReadAck(List<String> msgIds, String readerId) {
+        if (msgIds == null || readerId == null) return;
+
+        List<String> readMsgIds = new ArrayList<>();
+
+        // 处理离线消息
+        List<ChatMessage> offlineList = offlineMsgMap.get(readerId);
+        if (offlineList != null) {
+            for (ChatMessage msg : offlineList) {
+                if (msgIds.contains(msg.getMsgId())) {
+                    msg.setRead(true);
+                    readMsgIds.add(msg.getMsgId());
+                }
+            }
+            // 更新离线消息
+            offlineMsgMap.put(readerId, offlineList);
+        }
+
+        // 处理在线消息
+        for (String msgId : msgIds) {
+            ChatMessage onlineMsg = onlineMsgMap.get(msgId);
+            if (onlineMsg != null) {
+                onlineMsg.setRead(true);
+                readMsgIds.add(msgId);
+                onlineMsgMap.put(msgId, onlineMsg);
+            }
+        }
+
+        // 发送 cmd=101 已读回执给发送方
+        if (!readMsgIds.isEmpty()) {
+            for (String msgId : readMsgIds) {
+                ChatMessage msg = onlineMsgMap.get(msgId);
+                if (msg != null && msg.getFrom() != null) {
+                    ChatMessage readAck = new ChatMessage();
+                    readAck.setCmd(101);
+                    readAck.setMsgIds(Collections.singletonList(msgId));
+                    readAck.setFrom(readerId);
+                    readAck.setTo(msg.getFrom());
+                    WsResponse response = WsResponse.fromText(JsonUtil.toJson(readAck), ChatServerConfig.CHARSET);
+                    Tio.sendToUser(msg.getChannelContext().tioConfig, msg.getFrom(), response);
+                }
+            }
+        }
+    }
+    }

@@ -1,9 +1,12 @@
 package org.tio.chat.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import org.tio.core.ChannelContext;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * ChatMessage
@@ -26,6 +29,10 @@ import java.io.Serializable;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ChatMessage implements Serializable {
     private static final long serialVersionUID = 1L;
+
+    @JsonIgnore
+    private transient ChannelContext channelContext;
+
 
     /** 命令类型（1=登录，2=私聊，3=群聊，...） */
     private Integer cmd;
@@ -56,13 +63,16 @@ public class ChatMessage implements Serializable {
     /** 消息唯一标识 */
     private String msgId;
 
+    /** 消息已读状态（true=已读，false=未读） */
+    private Boolean read;
+
+    /** 消息id对列用于返回确认 **/
+    private List<String> msgIds;
+
     public ChatMessage() {
     }
 
-    /**
-     * 全参构造（包含 cmd）
-     */
-    public ChatMessage(Integer cmd, String type, String from, String to, String nickname, String message, Long timestamp) {
+    public ChatMessage(Integer cmd, String type, String from, String to, String nickname, String message, Long timestamp, String msgId, Boolean read, List<String> msgIds) {
         this.cmd = cmd;
         this.type = type;
         this.from = from;
@@ -70,9 +80,31 @@ public class ChatMessage implements Serializable {
         this.nickname = nickname;
         this.message = message;
         this.timestamp = timestamp;
+        this.msgId = msgId;
+        this.read = read;
+        this.msgIds = msgIds;
     }
 
     /* ------------------- getters / setters ------------------- */
+
+    public ChannelContext getChannelContext() {
+        return channelContext;
+    }
+
+    public void setChannelContext(ChannelContext channelContext) {
+        this.channelContext = channelContext;
+    }
+
+    public Boolean getRead() {
+        return read;
+    }
+
+    public void setRead(Boolean read) {
+        this.read = read;
+    }
+
+    public List<String> getMsgIds() { return msgIds; }
+    public void setMsgIds(List<String> msgIds) { this.msgIds = msgIds; }
 
     public Integer getCmd() {
         return cmd;
@@ -171,6 +203,8 @@ public class ChatMessage implements Serializable {
                 ", message='" + message + '\'' +
                 ", timestamp=" + timestamp +
                 ", msgId='" + msgId + '\'' +
+                ", read=" + read +
+                ", msgIds=" + msgIds +
                 '}';
     }
 }

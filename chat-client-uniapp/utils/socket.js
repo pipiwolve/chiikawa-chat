@@ -1,4 +1,3 @@
-
 let socketTask = null;
 let reconnectTimer = null;
 let reconnectCount = 0;
@@ -7,11 +6,9 @@ const MAX_RECONNECT = 6;
 let currentUserId = null;
 let messageQueue = [];
 const QUEUE_KEY = 'socket_message_queue';
+let onReadAck = null;
 
-// 存放消息状态回调，key为msgId，value为回调函数
 const msgStatusCallbacks = new Map();
-
-// 存放消息ACK超时定时器，key为msgId，value为定时器ID
 const ackTimers = new Map();
 
 const CONNECT_STATUS = {
@@ -20,6 +17,94 @@ const CONNECT_STATUS = {
     CONNECTED: 2,
 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
+
+export function connectSocket(userId, onMessage) {
+    if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING) {
+        console.warn('WebSocket 已经连接或正在连接中，跳过重复连接');
+        return;
+    }
+
+    currentUserId = userId;
+    connectStatus = CONNECT_STATUS.CONNECTING;
+    console.log('[socket] 准备连接 WebSocket，用户ID:', userId);
+
+    const wsUrl = `ws://192.168.110.238:9326?name=${encodeURIComponent(userId)}`;
+
+    try {
+        socketTask = uni.connectSocket({
+            url: wsUrl,
+            success() { console.log('WebSocket 连接请求已发起'); },
+            fail(err) { console.error('WebSocket 连接请求失败', err); attemptReconnect(onMessage); },
+        });
+    } catch (e) {
+        console.error('WebSocket 连接异常', e);
+        attemptReconnect(onMessage);
+        return;
+    }
+
+    socketTask.onOpen(() => {
+        console.log('📡 WebSocket 已打开');
+        connectStatus = CONNECT_STATUS.CONNECTED;
+        reconnectCount = 0;
+
+        const loginData = { cmd: 1, from: currentUserId };
+        sendRaw(loginData);
+
+        loadQueueFromStorage();
+        autoSendOfflineReadAck();
+        flushQueue(onMessage);
+    });
+
+    socketTask.onMessage((res) => {
+        const dataStr = res.data;
+        if (!dataStr || dataStr === 'null' || dataStr === 'undefined') return;
+
+        try {
+            const data = JSON.parse(dataStr);
+
+            // 已读回执 101 只更新发送方
+            if (data.cmd === 101 && data.msgIds && Array.isArray(data.msgIds)) {
+                if (currentUserId === data.from) {
+                    onReadAck && onReadAck(data.msgIds);
+                }
+            }
+            // ACK确认 -1
+            else if (data.cmd === -1 && data.msgId) {
+                const cb = msgStatusCallbacks.get(data.msgId);
+                if (cb) { cb('success'); msgStatusCallbacks.delete(data.msgId); }
+                if (ackTimers.has(data.msgId)) { clearTimeout(ackTimers.get(data.msgId)); ackTimers.delete(data.msgId); }
+            }
+            // 普通消息处理
+            else {
+                onMessage && onMessage(data);
+                if (data.msgId && data.cmd !== 101 && data.cmd !== -1) sendAck(data.msgId);
+            }
+        } catch (e) {
+            console.error('消息解析错误', e, dataStr);
+        }
+    });
+
+    socketTask.onClose(() => {
+        console.log('WebSocket 已关闭');
+        connectStatus = CONNECT_STATUS.DISCONNECTED;
+        attemptReconnect(onMessage);
+    });
+
+    socketTask.onError((err) => {
+        console.error('WebSocket 错误', err);
+        connectStatus = CONNECT_STATUS.DISCONNECTED;
+        attemptReconnect(onMessage);
+    });
+}
+
+// 自动发送离线消息已读回执，只发送接收方消息
+function autoSendOfflineReadAck() {
+    if (!messageQueue.length) return;
+    const offlineMsgIds = messageQueue
+        .filter(item => item.msgId && item.from !== currentUserId)
+        .map(item => item.msgId);
+    if (offlineMsgIds.length > 0) sendReadAck(offlineMsgIds);
+}
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -41,98 +126,19 @@ function persistQueue() {
 function loadQueueFromStorage() {
     try {
         const q = uni.getStorageSync(QUEUE_KEY);
-        messageQueue = Array.isArray(q) ? q : [];
+        if (Array.isArray(q)) {
+            messageQueue = q;
+        } else {
+            messageQueue = [];
+        }
+        messageQueue = messageQueue.filter(item => {
+            return !(item && (item.cmd === 99 || item.cmd === 100));
+        });
         console.log('[socket] 从本地缓存恢复队列，长度:', messageQueue.length);
     } catch (e) {
+        console.error('[socket] 从本地缓存恢复队列异常', e);
         messageQueue = [];
     }
-}
-
-export function connectSocket(userId, onMessage) {
-    if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING) {
-        console.warn('WebSocket 已经连接或正在连接中，跳过重复连接');
-        return;
-    }
-
-    currentUserId = userId;
-    connectStatus = CONNECT_STATUS.CONNECTING;
-    console.log('[socket] 准备连接 WebSocket，用户ID:', userId);
-
-    const wsUrl = `ws://192.168.2.5:9326?name=${encodeURIComponent(userId)}`; // 请根据实际IP端口替换
-    socketTask = uni.connectSocket({
-        url: wsUrl,
-        success() {
-            console.log('WebSocket 连接请行求发起');
-        },
-        fail(err) {
-            console.error('WebSocket 连接请求失败', err);
-            attemptReconnect(onMessage);
-        },
-    });
-
-    socketTask.onOpen(() => {
-        console.log('📡 WebSocket 已打开');
-        connectStatus = CONNECT_STATUS.CONNECTED;
-        reconnectCount = 0;
-
-        // 发送登录消息
-        const loginData = {
-            cmd: 1,
-            from: currentUserId,
-        };
-        socketTask.send({ data: JSON.stringify(loginData) });
-
-        loadQueueFromStorage();
-        flushQueue();
-    });
-
-    socketTask.onMessage((res) => {
-        const dataStr = res.data;
-        if (!dataStr || dataStr === 'null' || dataStr === 'undefined') {
-            console.warn('收到无效消息:', dataStr);
-            return;
-        }
-        if (dataStr.trim().startsWith('{') || dataStr.trim().startsWith('[')) {
-            try {
-                const data = JSON.parse(dataStr);
-
-                // 处理ACK消息，cmd == -1 表示后端确认收到消息
-                if (data.cmd === -1 && data.msgId) {
-                    const cb = msgStatusCallbacks.get(data.msgId);
-                    if (cb) {
-                        cb('success'); // 标记成功
-                        console.log('安全握手成功～')
-                        msgStatusCallbacks.delete(data.msgId);
-                    }
-                    // 清理对应ACK超时定时器
-                    if (ackTimers.has(data.msgId)) {
-                        clearTimeout(ackTimers.get(data.msgId));
-                        ackTimers.delete(data.msgId);
-                    }
-                    return; // 不转发ACK消息给业务处理，防止重复显示
-                }
-
-                // 非ACK普通消息回调
-                onMessage && onMessage(data);
-            } catch (e) {
-                console.error('消息解析错误', e, dataStr);
-            }
-        } else {
-            console.log('收到非 JSON 消息:', dataStr);
-        }
-    });
-
-    socketTask.onClose(() => {
-        console.log('WebSocket 已关闭');
-        connectStatus = CONNECT_STATUS.DISCONNECTED;
-        attemptReconnect(onMessage);
-    });
-
-    socketTask.onError((err) => {
-        console.error('WebSocket 错误', err);
-        connectStatus = CONNECT_STATUS.DISCONNECTED;
-        attemptReconnect(onMessage);
-    });
 }
 
 function attemptReconnect(onMessage) {
@@ -152,7 +158,19 @@ function attemptReconnect(onMessage) {
     }, delay);
 }
 
-function flushQueue() {
+function sendRaw(data) {
+    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
+        try {
+            socketTask.send({ data: JSON.stringify(data) });
+        } catch (e) {
+            console.error('[socket] 发送消息异常', e, data);
+        }
+    } else {
+        console.warn('[socket] WebSocket未连接，无法发送消息:', data);
+    }
+}
+
+function flushQueue(onMessage) {
     if (!messageQueue.length) {
         console.log('[socket] flushQueue：无缓存消息需要发送');
         return;
@@ -171,38 +189,37 @@ function flushQueue() {
                 data: JSON.stringify(item),
                 success() {
                     console.log('[socket] flushQueue 发送成功:', item);
-                    if (item.msgId && msgStatusCallbacks.has(item.msgId)) {
-                        msgStatusCallbacks.get(item.msgId)('sending');
-                        // 设置ACK超时定时器
-                        if (ackTimers.has(item.msgId)) {
-                            clearTimeout(ackTimers.get(item.msgId));
-                        }
-                        const timerId = setTimeout(() => {
-                            const cb = msgStatusCallbacks.get(item.msgId);
-                            if (cb) {
-                                cb('failed'); // 超时未收到ACK标记失败
-                                msgStatusCallbacks.delete(item.msgId);
-                            }
-                            ackTimers.delete(item.msgId);
-                        }, 5000);
-                        ackTimers.set(item.msgId, timerId);
-                    }
+                    setupAckTimeout(item.msgId);
                     messageQueue.shift();
                     persistQueue();
                     setTimeout(sendNext, 50);
                 },
                 fail(err) {
-                    console.warn('[socket] flush fail', err);
-                    if (item.msgId && msgStatusCallbacks.has(item.msgId)) {
-                        msgStatusCallbacks.get(item.msgId)('failed');
-                    }
+                    console.warn('[socket] flushQueue 发送失败', err);
+                    // 不调用状态回调，等待下一次flush重试
                 },
             });
         } catch (e) {
-            console.error('[socket] flush exception', e);
+            console.error('[socket] flushQueue 异常', e);
         }
     };
     sendNext();
+}
+
+function setupAckTimeout(msgId) {
+    if (!msgId) return;
+    if (ackTimers.has(msgId)) {
+        clearTimeout(ackTimers.get(msgId));
+    }
+    const timerId = setTimeout(() => {
+        const cb = msgStatusCallbacks.get(msgId);
+        if (cb) {
+            cb('failed');
+            msgStatusCallbacks.delete(msgId);
+        }
+        ackTimers.delete(msgId);
+    }, 5000);
+    ackTimers.set(msgId, timerId);
 }
 
 function sendData(data, onStatusChange) {
@@ -212,6 +229,8 @@ function sendData(data, onStatusChange) {
     if (onStatusChange && typeof onStatusChange === 'function') {
         msgStatusCallbacks.set(data.msgId, onStatusChange);
     }
+    if (onStatusChange) onStatusChange('sending');
+
     if (connectStatus !== CONNECT_STATUS.CONNECTED || !socketTask) {
         console.warn('WebSocket 未连接，消息加入队列缓存', data);
         messageQueue.push(data);
@@ -219,25 +238,13 @@ function sendData(data, onStatusChange) {
         if (onStatusChange) onStatusChange('failed');
         return;
     }
+
     try {
         socketTask.send({
             data: JSON.stringify(data),
             success() {
                 console.log('[socket] 消息发送成功', data);
-                if (onStatusChange) onStatusChange('sending');
-                // 设置ACK超时定时器
-                if (ackTimers.has(data.msgId)) {
-                    clearTimeout(ackTimers.get(data.msgId));
-                }
-                const timerId = setTimeout(() => {
-                    const cb = msgStatusCallbacks.get(data.msgId);
-                    if (cb) {
-                        cb('failed'); // 超时未收到ACK标记失败
-                        msgStatusCallbacks.delete(data.msgId);
-                    }
-                    ackTimers.delete(data.msgId);
-                }, 5000);
-                ackTimers.set(data.msgId, timerId);
+                setupAckTimeout(data.msgId);
             },
             fail(err) {
                 console.error('发送消息失败，加入缓存', err, data);
@@ -285,6 +292,44 @@ export function retrySend(msgObj, onStatusChange) {
     }
     console.log('[socket] retrySend 重发消息', msgObj);
     sendData(msgObj, onStatusChange);
+}
+
+function sendAck(msgId) {
+    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
+        const ackData = {
+            cmd: 99,
+            msgId: msgId,
+        };
+        try {
+            socketTask.send({ data: JSON.stringify(ackData) });
+            console.log('[socket] 发送ACK确认消息:', ackData);
+        } catch (e) {
+            console.error('[socket] 发送ACK消息失败', e);
+        }
+    }
+}
+
+export function sendReadAck(msgIds) {
+    if (!Array.isArray(msgIds) || msgIds.length === 0) {
+        console.warn('[socket] sendReadAck 缺少 msgIds');
+        return;
+    }
+    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
+        const ackData = {
+            cmd: 100,
+            msgIds: msgIds
+        };
+        try {
+            socketTask.send({ data: JSON.stringify(ackData) });
+            console.log('[socket] 发送已读确认:', ackData);
+        } catch (e) {
+            console.error('[socket] 发送已读确认失败', e);
+        }
+    }
+}
+
+export function setReadAckHandler(callback) {
+    onReadAck = callback;
 }
 
 export function closeSocket() {

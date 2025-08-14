@@ -18,6 +18,8 @@ import org.tio.websocket.server.handler.IWsMsgHandler;
 import java.util.List;
 import java.util.UUID;
 
+import static org.tio.chat.service.ChatService.processReadAck;
+
 /**
  * ChatWsHandler 是 t-io WebSocket 服务端的核心消息处理器。
  * 负责 WebSocket 握手、连接管理及消息分发，业务逻辑委托给 ChatService。
@@ -177,16 +179,25 @@ public class ChatWsHandler implements IWsMsgHandler {
                 case 2:
                     // 私聊消息，保存离线消息后转发
                     ChatService.saveOfflineMessage(chatMessage);
+                    ChatService.saveOnlineMessage(chatMessage, channelContext);
                     ChatService.sendPrivateMsg(chatMessage, channelContext);
                     break;
                 case 3:
                     // 群聊消息，保存离线消息后转发
                     ChatService.saveOfflineMessage(chatMessage);
+                    ChatService.saveOnlineMessage(chatMessage, channelContext);
                     ChatService.sendGroupMsg(chatMessage, channelContext);
                     break;
                 case 99:
-                    // 处理客户端ACK确认消息
+                    // 处理客户端ACK确认消息(送达确认）
                     handleClientAck(chatMessage, channelContext);
+                    break;
+                case 100:
+                    // 处理客户端已读确认消息
+                    List<String> msgIds = chatMessage.getMsgIds();
+                    if (msgIds != null && !msgIds.isEmpty()) {
+                        ChatService.processReadAck(msgIds, channelContext.userid); // 会处理在线+离线消息
+                    }
                     break;
                 default:
                     log.warn("未知cmd命令: {}", cmd);
@@ -204,6 +215,7 @@ public class ChatWsHandler implements IWsMsgHandler {
 
         String ackJson = JsonUtil.toJson(ackMessage);
         WsResponse ackResponse = WsResponse.fromText(ackJson, CHARSET);
+        log.info("发送ACK到客户端: {}", ackJson);
         Tio.send(channelContext, ackResponse);
 
         return null;
@@ -223,3 +235,4 @@ public class ChatWsHandler implements IWsMsgHandler {
         ChatService.processClientAck(chatMessage.getMsgId(), channelContext.userid);
     }
 }
+

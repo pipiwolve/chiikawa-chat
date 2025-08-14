@@ -12,7 +12,7 @@ import org.tio.chat.listener.ChatServerListener;
 
 public class ChatServerStarter {
     private WsServerStarter wsServerStarter;
-    private TioServerConfig serverTioConfig;
+    private static TioServerConfig serverTioConfig;
 
     public ChatServerStarter(int port, ChatWsHandler wsMsgHandler) throws Exception {
         wsServerStarter = new WsServerStarter(port, wsMsgHandler);
@@ -36,7 +36,7 @@ public class ChatServerStarter {
         appStarter.wsServerStarter.start();
     }
 
-    public TioServerConfig getTioServerConfig() {
+    public static TioServerConfig getTioServerConfig() {
         return serverTioConfig;
     }
 

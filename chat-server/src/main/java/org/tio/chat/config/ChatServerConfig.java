@@ -1,5 +1,8 @@
 package org.tio.chat.config;
 
+import org.tio.chat.handler.ChatWsHandler;
+import org.tio.chat.listener.ChatServerListener;
+import org.tio.core.TioConfig;
 import org.tio.utils.time.Time;
 
 public abstract class ChatServerConfig {
@@ -19,7 +22,9 @@ public abstract class ChatServerConfig {
     /**
      * 心跳超时时间，单位：毫秒
      */
-    public static final int HEARTBEAT_TIMEOUT = 1000 * 60;
+    public static final int HEARTBEAT_TIMEOUT = 100000 * 60;
+
+
     /**
      * ip数据监控统计，时间段
      * @author tanyaowu

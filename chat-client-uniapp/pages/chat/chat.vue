@@ -22,20 +22,24 @@
               item.from === userId ? 'msg-sent' : 'msg-received',
               item.isOffline ? 'offline-msg' : '',
               item.status === 'sending' ? 'msg-sending' : '',
-              item.status === 'failed' ? 'msg-failed' : ''
+              item.status === 'failed' ? 'msg-failed' : '',
+              item.status === 'read' && item.from === userId ? 'msg-read' : ''
             ]">
         <view class="msg-nickname">{{ item.nickname || item.from }}</view>
         <view class="msg-content">{{ item.message }}</view>
         <view class="msg-timestamp">{{ formatTimestamp(item.timestamp) }}</view>
 
-        <!-- 发送状态显示 -->
+        <!-- 发送方消息状态显示 -->
         <view v-if="item.from === userId" class="msg-status">
           <text v-if="item.status === 'sending'">发送中...</text>
-          <text v-if="item.status === 'failed'">
+          <text v-else-if="item.status === 'failed'">
             发送失败
-            <button @click="retrySend(index)">重试</button>
+            <button @click="retrySend(item)">重试</button>
           </text>
+          <text v-else-if="item.status === 'success'">未读</text>
+          <text v-else-if="item.status === 'read'">已读</text>
         </view>
+        <!-- 接收方不显示消息状态 -->
       </view>
     </scroll-view>
 
@@ -55,7 +59,7 @@
 </template>
 
 <script>
-import {connectSocket, sendMsg, sendGroupMsg, isConnected, closeSocket} from '@/utils/socket.js'
+import {connectSocket, sendMsg, sendGroupMsg, isConnected, closeSocket, setReadAckHandler, sendReadAck} from '@/utils/socket.js'
 import ContactList from '@/components/ContactList.vue'
 import GroupList from '@/components/GroupList.vue'
 
@@ -80,7 +84,7 @@ export default {
       ],
       connectionStatus: '未连接',
       scrollTop: 0, // 用于消息滚动控制
-      msgStatusMap: {}, // 存放消息发送状态，key为msgId，value为'sending'|'success'|'failed'
+      msgStatusMap: {}, // 存放消息发送状态，key为msgId，value为'sending'|'success'|'failed'|'read'
     }
   },
   onLoad(options) {
@@ -91,28 +95,53 @@ export default {
     this.targetId = this.contacts.concat(this.groups).find(c => c.id !== this.userId)?.id || ''
     this.connectionStatus = '连接中...'
 
+    // 注册全局已读回调：socket.js 收到 cmd=101 时只调用该回调，不再把消息抛给页面
+    setReadAckHandler((ids) => {
+      const list = Array.isArray(ids) ? ids : [ids];
+      this.handleReadAck(list);
+    });
+
     connectSocket(this.userId, (msg) => {
       console.log('[WebSocket] 收到消息:', msg);
-      // 这里的 msg 可能是一条消息，也可能是服务端批量发送的消息数组
+
       if (Array.isArray(msg)) {
         // 批量离线消息，追加到 messages 列表，并标记 isOffline
-        const offlineMsgs = msg.map(m => ({ ...m, isOffline: true }));
+        const offlineMsgs = msg.map(m => {
+          // 发送方离线消息状态为 sending，接收方离线消息状态为 null（不显示）
+          const status = (m.from === this.userId) ? 'sending' : null;
+          return { ...m, isOffline: true, status };
+        });
         this.messages.push(...offlineMsgs);
+
+        // 仅处理接收方未读消息
+        const unreadOfflineMsgs = offlineMsgs.filter(m => m.from !== this.userId);
+        const unreadMsgIds = unreadOfflineMsgs.map(m => m.msgId).filter(id => !!id);
+
+        this.$nextTick(() => {
+          if (unreadMsgIds.length > 0) {
+            sendReadAck(unreadMsgIds); // 发送已读确认
+          }
+          this.scrollTop = 100000; // 滚动到最新消息
+        });
       } else {
-        // 单条实时消息，避免重复添加自己发送的消息
+        // 单条实时消息
         const existingIdx = this.messages.findIndex(m => m.msgId === msg.msgId);
         if (existingIdx !== -1) {
-          // 更新已有消息（如状态等）
           this.messages[existingIdx] = { ...this.messages[existingIdx], ...msg };
         } else {
-          // 新消息，加入列表
-          this.messages.push({ ...msg, isOffline: false });
-        }
-      }
+          // 新消息初始状态：发送方为 sending，接收方不显示状态
+          const initStatus = (msg.from === this.userId) ? msg.status || 'sending' : null;
 
-      this.$nextTick(() => {
-        this.scrollTop = 100000;
-      });
+          this.messages.push({ ...msg, isOffline: false, status: initStatus });
+        }
+
+        this.$nextTick(() => {
+          if (msg.msgId && msg.from !== this.userId && msg.from === this.targetId) {
+            sendReadAck([msg.msgId]);
+          }
+          this.scrollTop = 100000; // 滚动到最新消息
+        });
+      }
     });
 
     // 监听连接状态变化（简单模拟，实际可扩展socket.js发事件）
@@ -123,6 +152,10 @@ export default {
       }
       this.connectionStatus = status;
     }, 1000)
+  },
+  onUnload() {
+    // 页面卸载时取消注册，避免重复回调/内存泄漏
+    setReadAckHandler(null);
   },
   methods: {
     // 发送消息方法，支持发送状态回调更新
@@ -155,25 +188,15 @@ export default {
       this.messages.push(newMsg);
 
       // 发送消息，传入状态更新回调，动态更新消息发送状态
+      const onStatusChange = (status) => {
+        this.msgStatusMap[msgId] = status;
+        newMsg.status = status;
+      };
+
       if (target.type === 'user') {
-        // ----状态动态回调逻辑----
-        sendMsg(this.targetId, this.inputMsg, this.userId, (status) => {
-          // status 为'sending'|'success'|'failed'
-          this.msgStatusMap[msgId] = status
-          // 更新对应消息的状态字段，触发视图刷新
-          const idx = this.messages.findIndex(m => m.msgId === msgId);
-          if (idx !== -1) {
-            this.messages[idx].status = status;
-          }
-        })
+        sendMsg(this.targetId, this.inputMsg, this.userId, onStatusChange);
       } else if (target.type === 'group') {
-        sendGroupMsg(this.targetId, this.inputMsg, this.userId, (status) => {
-          this.msgStatusMap[msgId] = status
-          const idx = this.messages.findIndex(m => m.msgId === msgId);
-          if (idx !== -1) {
-            this.messages[idx].status = status;
-          }
-        })
+        sendGroupMsg(this.targetId, this.inputMsg, this.userId, onStatusChange);
       }
 
       this.inputMsg = ''
@@ -197,6 +220,20 @@ export default {
       console.log('滚动到底部，加载更多消息')
     },
 
+    // 处理已读信息操作，仅更新发送方消息状态
+    handleReadAck(msgIds) {
+      msgIds.forEach(msgId => {
+        const msg = this.messages.find(m => m.msgId === msgId);
+        if (msg) {
+          // 仅更新发送方状态
+          if (msg.from === this.userId && msg.status !== 'sending' && msg.status !== 'failed' && msg.status !== 'read') {
+            msg.status = 'read';
+            this.msgStatusMap[msgId] = 'read';
+          }
+        }
+      });
+    },
+
     // 关闭连接操作
     disconnect() {
       closeSocket()
@@ -213,28 +250,25 @@ export default {
     },
 
     // 重试发送失败的消息，更新状态
-    retrySend(index) {
-      const msg = this.messages[index];
+    retrySend(msg) {
       if (!msg.msgId) {
         uni.showToast({title: '无法重发：缺少msgId', icon: 'none'});
         return;
       }
       // 设置状态为发送中
-      this.messages[index].status = 'sending';
+      msg.status = 'sending';
       this.msgStatusMap[msg.msgId] = 'sending';
 
       // 重新发送消息，传入回调更新状态
-      // 这里假设retrySend是sendMsg的重发逻辑，直接调用sendMsg接口
+      const onStatusChange = (status) => {
+        this.msgStatusMap[msg.msgId] = status;
+        msg.status = status;
+      };
+
       if (msg.type === 'user') {
-        sendMsg(msg.to, msg.message, msg.from, (status) => {
-          this.msgStatusMap[msg.msgId] = status;
-          this.messages[index].status = status;
-        })
+        sendMsg(msg.to, msg.message, msg.from, onStatusChange);
       } else if (msg.type === 'group') {
-        sendGroupMsg(msg.to, msg.message, msg.from, (status) => {
-          this.msgStatusMap[msg.msgId] = status;
-          this.messages[index].status = status;
-        })
+        sendGroupMsg(msg.to, msg.message, msg.from, onStatusChange);
       }
     }
   }
@@ -262,6 +296,8 @@ export default {
   word-wrap: break-word;
   display: flex;
   flex-direction: column;
+  position: relative;
+  padding-bottom: 18px;
 }
 
 /* 自己发的消息右对齐，背景颜色不同 */
@@ -275,6 +311,34 @@ export default {
   align-self: flex-start;
   background-color: #FFF;
   border: 1px solid #ddd;
+}
+
+/* 已读显示 */
+.msg-read {
+  color: #4caf50;
+  font-weight: 500;
+  opacity: 1;
+}
+
+.msg-status {
+  position: absolute;
+  bottom: 2px;
+  right: 8px;
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  align-items: center;
+}
+
+.msg-status text {
+  margin-left: 6px;
+}
+.msg-status text:nth-child(3) {
+  color: #999; /* 未读灰色 */
+  font-weight: 500;
+}
+.msg-status text:nth-child(4) {
+  color: #4caf50; /* 已读绿色 */
 }
 
 /* 离线消息样式 */
@@ -310,6 +374,7 @@ export default {
   color: #999;
   align-self: flex-end;
   margin-top: 4px;
+  margin-bottom: 2px;
 }
 
 .input-box {
@@ -327,12 +392,6 @@ export default {
   padding: 5px 10px;
   font-size: 12px;
   color: #888;
-}
-
-.msg-status {
-  font-size: 12px;
-  color: #888;
-  margin-top: 2px;
 }
 
 .msg-status button {
