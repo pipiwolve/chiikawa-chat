@@ -22,6 +22,7 @@ public class ChatServerStarter {
         serverTioConfig.setIpStatListener(ChatServerIpStatListener.me);
         serverTioConfig.ipStats.addDurations(ChatServerConfig.IpStatDuration.IPSTAT_DURATIONS);
         serverTioConfig.setHeartbeatTimeout(ChatServerConfig.HEARTBEAT_TIMEOUT);
+        ChatServerConfig.initRedis("redis://localhost:6379");
 
         if (P.getInt("ws.use.ssl", 1) == 1) {
             String keyStoreFile = P.get("ssl.keystore", null);

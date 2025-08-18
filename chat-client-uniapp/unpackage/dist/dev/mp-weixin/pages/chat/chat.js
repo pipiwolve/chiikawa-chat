@@ -61,7 +61,7 @@ const _sfc_main = {
       } else {
         const existingIdx = this.messages.findIndex((m) => m.msgId === msg.msgId);
         if (existingIdx !== -1) {
-          common_vendor.index.__f__("log", "at pages/chat/chat.vue:131", this.messages[existingIdx]);
+          common_vendor.index.__f__("log", "at pages/chat/chat.vue:133", this.messages[existingIdx]);
           this.messages[existingIdx] = { ...this.messages[existingIdx], ...msg };
         } else {
           this.messages.push({ ...msg, isOffline: false, status: null });
@@ -77,7 +77,7 @@ const _sfc_main = {
     setInterval(() => {
       const status = utils_socket.isConnected() ? "已连接" : "未连接";
       if (this.connectionStatus !== status) {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:153", "[连接状态] 状态变化:", status);
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:155", "[连接状态] 状态变化:", status);
       }
       this.connectionStatus = status;
     }, 1e3);
@@ -99,7 +99,7 @@ const _sfc_main = {
         common_vendor.index.showToast({ title: "请选择联系人或群组", icon: "none" });
         return;
       }
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:177", "[发送] 目标:", this.targetId, "消息:", this.inputMsg);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:179", "[发送] 目标:", this.targetId, "消息:", this.inputMsg);
       const msgId = "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1e4);
       const newMsg = {
         msgId,
@@ -113,7 +113,7 @@ const _sfc_main = {
         nickname: (this.contacts.find((c) => c.id === this.userId) || {}).name || this.userId
       };
       this.messages.push(newMsg);
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:195", "debug", newMsg);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:197", "debug", newMsg);
       const onStatusChange = (status) => {
         this.msgStatusMap[msgId] = status;
         newMsg.status = status;
@@ -135,27 +135,27 @@ const _sfc_main = {
         utils_socket.sendReadAck(pendingIds);
       }
       this.targetId = id;
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:227", "[切换聊天对象] 目标ID:", id);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:229", "[切换聊天对象] 目标ID:", id);
       this.messages = [];
     },
     // 滚动到底部，加载更多消息（占位）
     loadMoreMessages() {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:235", "滚动到底部，加载更多消息");
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:237", "滚动到底部，加载更多消息");
     },
     // 处理已读信息操作，仅更新发送方消息状态
     handleReadAck(msgIds) {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:241", "[handleReadAck] 当前消息列表 msgIds:", this.messages.map((m) => m.msgId));
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:244", "[handleReadAck] 收到回执 msgIds:", msgIds);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:243", "[handleReadAck] 当前消息列表 msgIds:", this.messages.map((m) => m.msgId));
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:246", "[handleReadAck] 收到回执 msgIds:", msgIds);
       msgIds.forEach((msgId) => {
         const msg = this.messages.find((m) => m.msgId === msgId);
         if (msg) {
           if (msg.from === this.userId && msg.status === "success") {
             msg.status = "read";
             this.msgStatusMap[msgId] = "read";
-            common_vendor.index.__f__("log", "at pages/chat/chat.vue:252", "[chat.vue] 更新消息状态为已读:", msg);
+            common_vendor.index.__f__("log", "at pages/chat/chat.vue:254", "[chat.vue] 更新消息状态为已读:", msg);
           }
         } else {
-          common_vendor.index.__f__("warn", "at pages/chat/chat.vue:255", "[chat.vue] 找不到 msgId 对应的消息:", msgId);
+          common_vendor.index.__f__("warn", "at pages/chat/chat.vue:257", "[chat.vue] 找不到 msgId 对应的消息:", msgId);
         }
       });
     },
@@ -177,7 +177,7 @@ const _sfc_main = {
     // 关闭连接操作
     disconnect() {
       utils_socket.closeSocket();
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:279", "手动断开 WebSocket 连接");
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:281", "手动断开 WebSocket 连接");
     },
     // 格式化时间戳为 HH:mm 格式
     formatTimestamp(ts) {

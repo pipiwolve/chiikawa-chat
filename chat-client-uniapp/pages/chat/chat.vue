@@ -108,13 +108,14 @@ export default {
       console.log('[WebSocket] 收到消息:', msg);
 
       if (Array.isArray(msg)) {
-        // 批量离线消息，追加到 messages 列表，并标记 isOffline
+        //--批量离线消息，追加到 messages 列表，并标记 isOffline
         const offlineMsgs = msg.map(m => {
           return { ...m, isOffline: true, status: null };
         });
         this.messages.push(...offlineMsgs);
 
         // 收集当前会话对方未读消息 msgId，防抖批量调用 sendReadAck
+        // 只保留别人发给自己的信息，同时只保留当前正在聊天的对象发来的信息
         const unreadOfflineMsgs = offlineMsgs.filter(m => m.from !== this.userId && m.from === this.targetId);
         const unreadMsgIds = unreadOfflineMsgs.map(m => m.msgId).filter(id => !!id);
         if (unreadMsgIds.length > 0) {
@@ -125,7 +126,8 @@ export default {
           this.scrollTop = 100000; // 滚动到最新消息
         });
       } else {
-        // 单条实时消息
+        //--单条实时消息
+        // 之
         const existingIdx = this.messages.findIndex(m => m.msgId === msg.msgId);
         if (existingIdx !== -1) {
           console.log(this.messages[existingIdx]);

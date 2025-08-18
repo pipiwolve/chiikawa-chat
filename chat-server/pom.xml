@@ -37,6 +37,13 @@
             <artifactId>jackson-databind</artifactId>
             <version>2.13.5</version>
         </dependency>
+
+        <!-- Lettuce Redis 客户端 -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>6.2.1.RELEASE</version>
+        </dependency>
     </dependencies>
 
     <build>

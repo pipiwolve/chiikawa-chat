@@ -1,5 +1,7 @@
 package org.tio.chat.config;
 
+import io.lettuce.core.RedisClient;
+import io.lettuce.core.api.StatefulRedisConnection;
 import org.tio.chat.handler.ChatWsHandler;
 import org.tio.chat.listener.ChatServerListener;
 import org.tio.core.TioConfig;
@@ -11,6 +13,20 @@ public abstract class ChatServerConfig {
      */
     public static final String PROTOCOL_NAME = "Chiikawa-Chat-Server";
     public static final String CHARSET = "utf-8";
+
+
+    // Redis 连接
+    private static RedisClient redisClient;
+    private static StatefulRedisConnection<String, String> connection;
+
+    public static void initRedis(String redisUri) {
+        redisClient = RedisClient.create(redisUri);
+        connection = redisClient.connect();
+    }
+
+    public static StatefulRedisConnection<String, String> getRedisConnection() {
+        return connection;
+    }
     /**
      * 监听的ip
      */

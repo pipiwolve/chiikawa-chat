@@ -92,10 +92,6 @@ export function connectSocket(userId, onMessage) {
     });
 }
 
-// 自动发送离线消息已读回执，只发送接收方消息
-function autoSendOfflineReadAck() {
-    // no-op: queued read-acks (cmd=100) are handled by flushQueue after loadQueueFromStorage()
-}
 
 function generateUUID() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
