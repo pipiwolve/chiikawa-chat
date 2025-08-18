@@ -32,7 +32,6 @@ public class ChatServerListener extends WsTioServerListener {
     }
 
 
-
     @Override
     public void onAfterDecoded(ChannelContext channelContext, Packet packet, int packetSize) throws Exception {
         super.onAfterDecoded(channelContext, packet, packetSize);

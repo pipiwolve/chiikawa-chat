@@ -85,6 +85,8 @@ export default {
       connectionStatus: '未连接',
       scrollTop: 0, // 用于消息滚动控制
       msgStatusMap: {}, // 存放消息发送状态，key为msgId，value为'sending'|'success'|'failed'|'read'
+      unreadMsgIdsBuffer: [], // 用于收集未读消息ID，防抖批量发送已读回执
+      unreadMsgIdsTimer: null,
     }
   },
   onLoad(options) {
@@ -96,8 +98,9 @@ export default {
     this.connectionStatus = '连接中...'
 
     // 注册全局已读回调：socket.js 收到 cmd=101 时只调用该回调，不再把消息抛给页面
-    setReadAckHandler((ids) => {
-      const list = Array.isArray(ids) ? ids : [ids];
+    setReadAckHandler((msgIds) => {
+      console.log('[chat.vue] setReadAckHandler 回调触发，msgIds:', msgIds);
+      const list = Array.isArray(msgIds) ? msgIds : [msgIds];
       this.handleReadAck(list);
     });
 
@@ -107,38 +110,37 @@ export default {
       if (Array.isArray(msg)) {
         // 批量离线消息，追加到 messages 列表，并标记 isOffline
         const offlineMsgs = msg.map(m => {
-          // 发送方离线消息状态为 sending，接收方离线消息状态为 null（不显示）
-          const status = (m.from === this.userId) ? 'sending' : null;
-          return { ...m, isOffline: true, status };
+          return { ...m, isOffline: true, status: null };
         });
         this.messages.push(...offlineMsgs);
 
-        // 仅处理接收方未读消息
-        const unreadOfflineMsgs = offlineMsgs.filter(m => m.from !== this.userId);
+        // 收集当前会话对方未读消息 msgId，防抖批量调用 sendReadAck
+        const unreadOfflineMsgs = offlineMsgs.filter(m => m.from !== this.userId && m.from === this.targetId);
         const unreadMsgIds = unreadOfflineMsgs.map(m => m.msgId).filter(id => !!id);
+        if (unreadMsgIds.length > 0) {
+          this.collectUnreadMsgIds(unreadMsgIds);
+        }
 
         this.$nextTick(() => {
-          if (unreadMsgIds.length > 0) {
-            sendReadAck(unreadMsgIds); // 发送已读确认
-          }
           this.scrollTop = 100000; // 滚动到最新消息
         });
       } else {
         // 单条实时消息
         const existingIdx = this.messages.findIndex(m => m.msgId === msg.msgId);
         if (existingIdx !== -1) {
+          console.log(this.messages[existingIdx]);
           this.messages[existingIdx] = { ...this.messages[existingIdx], ...msg };
         } else {
-          // 新消息初始状态：发送方为 sending，接收方不显示状态
-          const initStatus = (msg.from === this.userId) ? msg.status || 'sending' : null;
+          // 新消息初始状态：接收方不显示状态
+          this.messages.push({ ...msg, isOffline: false, status: null });
+        }
 
-          this.messages.push({ ...msg, isOffline: false, status: initStatus });
+        // 收集当前会话对方未读消息 msgId，防抖批量调用 sendReadAck
+        if (msg.msgId && msg.from !== this.userId && msg.from === this.targetId) {
+          this.collectUnreadMsgIds([msg.msgId]);
         }
 
         this.$nextTick(() => {
-          if (msg.msgId && msg.from !== this.userId && msg.from === this.targetId) {
-            sendReadAck([msg.msgId]);
-          }
           this.scrollTop = 100000; // 滚动到最新消息
         });
       }
@@ -156,6 +158,10 @@ export default {
   onUnload() {
     // 页面卸载时取消注册，避免重复回调/内存泄漏
     setReadAckHandler(null);
+    if (this.unreadMsgIdsTimer) {
+      clearTimeout(this.unreadMsgIdsTimer);
+      this.unreadMsgIdsTimer = null;
+    }
   },
   methods: {
     // 发送消息方法，支持发送状态回调更新
@@ -175,7 +181,7 @@ export default {
 
       // 创建消息对象，添加到消息列表，状态初始为sending
       const newMsg = {
-        msgId,
+        msgId : msgId,
         from: this.userId,
         to: this.targetId,
         message: this.inputMsg,
@@ -183,9 +189,10 @@ export default {
         isOffline: false,
         timestamp: Date.now(),
         type: target.type,
-        nickname: this.contacts.find(c => c.id === this.userId)?.name || this.userId
+        nickname: (this.contacts.find(c => c.id === this.userId) || {}).name || this.userId
       };
       this.messages.push(newMsg);
+      console.log('debug', newMsg);
 
       // 发送消息，传入状态更新回调，动态更新消息发送状态
       const onStatusChange = (status) => {
@@ -194,9 +201,9 @@ export default {
       };
 
       if (target.type === 'user') {
-        sendMsg(this.targetId, this.inputMsg, this.userId, onStatusChange);
+        sendMsg(this.targetId, this.inputMsg, this.userId, onStatusChange, msgId);
       } else if (target.type === 'group') {
-        sendGroupMsg(this.targetId, this.inputMsg, this.userId, onStatusChange);
+        sendGroupMsg(this.targetId, this.inputMsg, this.userId, onStatusChange, msgId);
       }
 
       this.inputMsg = ''
@@ -208,10 +215,18 @@ export default {
 
     // 选择聊天对象，切换聊天目标
     handleSelectUser(id) {
-      this.targetId = id
-      console.log('[切换聊天对象] 目标ID:', id)
-      // 切换聊天对象时清空消息（可改为加载历史）
-      this.messages = []
+      // 发送当前会话未读消息的已读回执
+      const pendingIds = this.messages
+          .filter(m => m.from !== this.userId && m.to === this.targetId)
+          .map(m => m.msgId)
+          .filter(Boolean);
+      if (pendingIds.length) {
+        sendReadAck(pendingIds);
+      }
+      this.targetId = id;
+      console.log('[切换聊天对象] 目标ID:', id);
+      // 切换聊天对象时清空消息（可改为加载历史以提升用户体验）
+      this.messages = [];
     },
 
     // 滚动到底部，加载更多消息（占位）
@@ -222,16 +237,40 @@ export default {
 
     // 处理已读信息操作，仅更新发送方消息状态
     handleReadAck(msgIds) {
+      // 调试：查看当前消息列表的 msgId
+      console.log('[handleReadAck] 当前消息列表 msgIds:', this.messages.map(m => m.msgId));
+
+      // 调试：查看收到的回执 msgIds
+      console.log('[handleReadAck] 收到回执 msgIds:', msgIds);
       msgIds.forEach(msgId => {
         const msg = this.messages.find(m => m.msgId === msgId);
         if (msg) {
-          // 仅更新发送方状态
-          if (msg.from === this.userId && msg.status !== 'sending' && msg.status !== 'failed' && msg.status !== 'read') {
+          // 仅更新发送方状态：已发送未读(success) => 已读(read)
+          if (msg.from === this.userId && msg.status === 'success') {
             msg.status = 'read';
             this.msgStatusMap[msgId] = 'read';
+            console.log('[chat.vue] 更新消息状态为已读:', msg);
           }
+        } else {
+          console.warn('[chat.vue] 找不到 msgId 对应的消息:', msgId);
         }
       });
+    },
+
+    // 收集未读消息ID，防抖批量调用 sendReadAck
+    collectUnreadMsgIds(ids) {
+      this.unreadMsgIdsBuffer.push(...ids);
+      if (this.unreadMsgIdsTimer) {
+        clearTimeout(this.unreadMsgIdsTimer);
+      }
+      this.unreadMsgIdsTimer = setTimeout(() => {
+        const uniqueIds = Array.from(new Set(this.unreadMsgIdsBuffer));
+        if (uniqueIds.length > 0) {
+          sendReadAck(uniqueIds);
+        }
+        this.unreadMsgIdsBuffer = [];
+        this.unreadMsgIdsTimer = null;
+      }, 300);
     },
 
     // 关闭连接操作

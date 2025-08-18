@@ -11,6 +11,7 @@ import org.tio.core.ChannelContext;
 import org.tio.core.Tio;
 import org.tio.http.common.HttpRequest;
 import org.tio.http.common.HttpResponse;
+import org.tio.utils.lock.SetWithLock;
 import org.tio.websocket.common.WsRequest;
 import org.tio.websocket.common.WsResponse;
 import org.tio.websocket.server.handler.IWsMsgHandler;
@@ -98,6 +99,17 @@ public class ChatWsHandler implements IWsMsgHandler {
             // 标记离线消息已读或删除，避免重复推送
             ChatService.markOfflineMessagesRead(channelContext.userid);
         }
+        // 5. 推送离线已读回执
+        List<ChatMessage> receipts = ChatService.getOfflineReadReceipts(channelContext.userid);
+        if (receipts != null && !receipts.isEmpty()) {
+            log.info("用户 [{}] 上线，推送 {} 条离线已读回执", channelContext.userid, receipts.size());
+            for (ChatMessage receipt : receipts) {
+                WsResponse resp = WsResponse.fromText(JsonUtil.toJson(receipt), ChatServerConfig.CHARSET);
+                Tio.send(channelContext, resp);
+            }
+            ChatService.clearOfflineReadReceipts(channelContext.userid);
+        }
+
     }
 
     @Override
@@ -178,25 +190,24 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
                 case 2:
                     // 私聊消息，保存离线消息后转发
-                    ChatService.saveOfflineMessage(chatMessage);
-                    ChatService.saveOnlineMessage(chatMessage, channelContext);
+                    SetWithLock<ChannelContext> swl = Tio.getChannelContextsByUserid(channelContext.tioConfig, chatMessage.getTo());
+                    boolean online = swl != null && swl.getObj() != null && !swl.getObj().isEmpty();
+                    if (online) {
+                        ChatService.saveOnlineMessage(chatMessage);
+                    } else {
+                        ChatService.saveOfflineMessage(chatMessage);
+                    }
                     ChatService.sendPrivateMsg(chatMessage, channelContext);
                     break;
                 case 3:
-                    // 群聊消息，保存离线消息后转发
-                    ChatService.saveOfflineMessage(chatMessage);
-                    ChatService.saveOnlineMessage(chatMessage, channelContext);
+                    // 群聊消息转发
                     ChatService.sendGroupMsg(chatMessage, channelContext);
-                    break;
-                case 99:
-                    // 处理客户端ACK确认消息(送达确认）
-                    handleClientAck(chatMessage, channelContext);
                     break;
                 case 100:
                     // 处理客户端已读确认消息
                     List<String> msgIds = chatMessage.getMsgIds();
                     if (msgIds != null && !msgIds.isEmpty()) {
-                        ChatService.processReadAck(msgIds, channelContext.userid); // 会处理在线+离线消息
+                        ChatService.processReadAck(msgIds, channelContext.userid, channelContext); // 会处理在线+离线消息
                     }
                     break;
                 default:
@@ -206,33 +217,6 @@ public class ChatWsHandler implements IWsMsgHandler {
             log.error("处理消息异常: {}", text, e);
         }
 
-        // 发送ACK确认消息给客户端，包含cmd=ack和对应msgId
-        ChatMessage ackMessage = new ChatMessage();
-        ackMessage.setCmd(-1); // 约定服务器ACK命令为-1
-        ackMessage.setMsgId(chatMessage.getMsgId());
-        ackMessage.setFrom("server");
-        ackMessage.setMessage("ACK");
-
-        String ackJson = JsonUtil.toJson(ackMessage);
-        WsResponse ackResponse = WsResponse.fromText(ackJson, CHARSET);
-        log.info("发送ACK到客户端: {}", ackJson);
-        Tio.send(channelContext, ackResponse);
-
         return null;
     }
-
-    /**
-     * 处理客户端发送的ACK确认消息，业务逻辑可根据需求扩展。
-     * @param chatMessage 客户端发送的ACK消息对象
-     * @param channelContext 连接上下文
-     */
-    private void handleClientAck(ChatMessage chatMessage, ChannelContext channelContext) {
-        // 这里可以实现服务器对客户端ACK的处理逻辑，如日志记录、消息状态更新等
-        if (log.isDebugEnabled()) {
-            log.debug("收到客户端ACK消息，msgId: {}, 来自用户: {}", chatMessage.getMsgId(), channelContext.userid);
-        }
-        // 示例：调用ChatService更新消息状态
-        ChatService.processClientAck(chatMessage.getMsgId(), channelContext.userid);
-    }
 }
-
