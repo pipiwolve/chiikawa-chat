@@ -97,7 +97,7 @@ public class ChatWsHandler implements IWsMsgHandler {
                 Tio.send(channelContext, offlineResponse);
             }
             // 标记离线消息已读或删除，避免重复推送
-            ChatService.markOfflineMessagesRead(channelContext.userid);
+          // ChatService.markOfflineMessagesRead(channelContext.userid);
         }
         // 5. 推送离线已读回执
         List<ChatMessage> receipts = ChatService.getOfflineReadReceipts(channelContext.userid);
@@ -194,10 +194,11 @@ public class ChatWsHandler implements IWsMsgHandler {
                     boolean online = swl != null && swl.getObj() != null && !swl.getObj().isEmpty();
                     if (online) {
                         ChatService.saveOnlineMessage(chatMessage);
+                        ChatService.sendPrivateMsg(chatMessage, channelContext);
                     } else {
                         ChatService.saveOfflineMessage(chatMessage);
                     }
-                    ChatService.sendPrivateMsg(chatMessage, channelContext);
+
                     break;
                 case 3:
                     // 群聊消息转发
