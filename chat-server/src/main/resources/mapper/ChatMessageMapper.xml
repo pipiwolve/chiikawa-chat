@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="org.tio.chat.mapper.ChatMessageMapper">
+
+    <!-- 插入一条消息 -->
+    <insert id="insert" parameterType="org.tio.chat.model.ChatMessage">
+        INSERT INTO chat_message
+        (msg_id, from_user, to_user, group_id, content, cmd, is_read, is_offline, create_time)
+        VALUES
+            (#{msgId}, #{fromUser}, #{toUser}, #{groupId}, #{content}, #{cmd}, #{isRead}, #{isOffline}, NOW())
+    </insert>
+
+    <!-- 查询用户离线消息 -->
+    <select id="selectOfflineByToUser" resultType="org.tio.chat.model.ChatMessage">
+        SELECT id,
+               msg_id AS msgId,
+               from_user AS fromUser,
+               to_user AS toUser,
+               group_id AS groupId,
+               content,
+               cmd,
+               is_read AS isRead,
+               is_offline AS isOffline,
+               create_time AS createTime
+        FROM chat_message
+        WHERE to_user = #{toUser}
+          AND is_offline = TRUE
+        ORDER BY create_time ASC
+    </select>
+
+    <!-- 将用户的离线消息标记为已投递 -->
+    <update id="markDeliveredByToUser">
+        UPDATE chat_message
+        SET is_offline = FALSE
+        WHERE to_user = #{toUser}
+          AND is_offline = TRUE
+    </update>
+
+    <!-- 批量标记消息为已读 -->
+    <update id="markReadByMsgIds">
+        UPDATE chat_message
+        SET is_read = TRUE
+        WHERE msg_id IN
+        <foreach collection="msgIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND to_user = #{readerId}
+    </update>
+
+    <!-- 查询发送方 by msgIds -->
+    <select id="selectFromByMsgIds" parameterType="map" resultType="map">
+        SELECT msg_id, from_user AS fromUser
+        FROM chat_message
+        WHERE msg_id IN
+        <foreach item="id" collection="msgIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND to_user = #{readerId}
+        AND cmd = 2
+    </select>
+
+</mapper>

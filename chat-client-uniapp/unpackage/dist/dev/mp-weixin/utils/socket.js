@@ -16,35 +16,32 @@ const CONNECT_STATUS = {
 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
 function connectSocket(userId, onMessage) {
-  if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING) {
-    common_vendor.index.__f__("warn", "at utils/socket.js:24", "WebSocket 已经连接或正在连接中，跳过重复连接");
+  if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING)
     return;
-  }
   currentUserId = userId;
   connectStatus = CONNECT_STATUS.CONNECTING;
-  common_vendor.index.__f__("log", "at utils/socket.js:30", "[socket] 准备连接 WebSocket，用户ID:", userId);
   const wsUrl = `ws://192.168.110.238:9326?name=${encodeURIComponent(userId)}`;
   try {
     socketTask = common_vendor.index.connectSocket({
       url: wsUrl,
       success() {
-        common_vendor.index.__f__("log", "at utils/socket.js:37", "WebSocket 连接请求已发起");
+        common_vendor.index.__f__("log", "at utils/socket.js:33", "WebSocket 连接请求已发起");
       },
       fail(err) {
-        common_vendor.index.__f__("error", "at utils/socket.js:38", "WebSocket 连接请求失败", err);
+        common_vendor.index.__f__("error", "at utils/socket.js:34", "WebSocket 连接请求失败", err);
         attemptReconnect(onMessage);
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:41", "WebSocket 连接异常", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:37", "WebSocket 连接异常", e);
     attemptReconnect(onMessage);
     return;
   }
   socketTask.onOpen(() => {
-    common_vendor.index.__f__("log", "at utils/socket.js:47", "📡 WebSocket 已打开");
+    common_vendor.index.__f__("log", "at utils/socket.js:43", "📡 WebSocket 已打开");
     connectStatus = CONNECT_STATUS.CONNECTED;
     reconnectCount = 0;
-    const loginData = { cmd: 1, from: currentUserId };
+    const loginData = { cmd: 1, fromUser: currentUserId };
     sendRaw(loginData);
     loadQueueFromStorage();
     flushQueue();
@@ -56,60 +53,34 @@ function connectSocket(userId, onMessage) {
     try {
       const data = JSON.parse(dataStr);
       if (data && typeof data === "object" && data.cmd === 101 && data.msgIds && Array.isArray(data.msgIds)) {
-        common_vendor.index.__f__("log", "at utils/socket.js:68", "[socket] 收到已读回执 cmd=101，msgIds:", data.msgIds);
-        if (data.to === currentUserId) {
+        if (data.toUser === currentUserId) {
           onReadAck && onReadAck(data.msgIds);
         }
         return;
       }
       onMessage && onMessage(data);
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:78", "消息解析错误", e, dataStr);
+      common_vendor.index.__f__("error", "at utils/socket.js:72", "消息解析错误", e, dataStr);
     }
   });
   socketTask.onClose(() => {
-    common_vendor.index.__f__("log", "at utils/socket.js:83", "WebSocket 已关闭");
+    common_vendor.index.__f__("log", "at utils/socket.js:77", "WebSocket 已关闭");
     connectStatus = CONNECT_STATUS.DISCONNECTED;
     attemptReconnect(onMessage);
   });
   socketTask.onError((err) => {
-    common_vendor.index.__f__("error", "at utils/socket.js:89", "WebSocket 错误", err);
+    common_vendor.index.__f__("error", "at utils/socket.js:83", "WebSocket 错误", err);
     connectStatus = CONNECT_STATUS.DISCONNECTED;
     attemptReconnect(onMessage);
   });
 }
-function persistQueue() {
-  try {
-    common_vendor.index.setStorageSync(QUEUE_KEY, messageQueue);
-    common_vendor.index.__f__("log", "at utils/socket.js:107", "[socket] 缓存队列已持久化，长度:", messageQueue.length);
-  } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:109", "[socket] persistQueue error", e);
-  }
-}
-function loadQueueFromStorage() {
-  try {
-    const q = common_vendor.index.getStorageSync(QUEUE_KEY);
-    if (Array.isArray(q)) {
-      messageQueue = q;
-    } else {
-      messageQueue = [];
-    }
-    common_vendor.index.__f__("log", "at utils/socket.js:122", "[socket] 从本地缓存恢复队列，长度:", messageQueue.length);
-  } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:124", "[socket] 从本地缓存恢复队列异常", e);
-    messageQueue = [];
-  }
-}
 function attemptReconnect(onMessage) {
-  if (reconnectCount >= MAX_RECONNECT) {
-    common_vendor.index.__f__("warn", "at utils/socket.js:131", "重连次数达到上限，停止重连");
+  if (reconnectCount >= MAX_RECONNECT)
     return;
-  }
   if (reconnectTimer)
     return;
   reconnectCount++;
   const delay = Math.min(3e4, 5e3 * Math.pow(2, reconnectCount - 1));
-  common_vendor.index.__f__("log", "at utils/socket.js:138", `第${reconnectCount}次重连，${delay}ms后尝试`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connectSocket(currentUserId, onMessage);
@@ -120,15 +91,14 @@ function sendRaw(data) {
     try {
       socketTask.send({ data: JSON.stringify(data) });
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:151", "[socket] 发送消息异常", e, data);
+      common_vendor.index.__f__("error", "at utils/socket.js:105", "[socket] 发送消息异常", e, data);
     }
   } else {
-    common_vendor.index.__f__("warn", "at utils/socket.js:154", "[socket] WebSocket未连接，无法发送消息:", data);
+    common_vendor.index.__f__("warn", "at utils/socket.js:107", "[socket] WebSocket未连接，无法发送消息:", data);
   }
 }
-const flushQueue = () => {
+function flushQueue() {
   if (!messageQueue.length) {
-    common_vendor.index.__f__("log", "at utils/socket.js:161", "[socket] flushQueue 完成，缓存队列为空");
     persistQueue();
     return;
   }
@@ -137,30 +107,40 @@ const flushQueue = () => {
     socketTask.send({
       data: JSON.stringify(item),
       success() {
-        common_vendor.index.__f__("log", "at utils/socket.js:172", "[socket] flushQueue 发送成功:", item);
         messageQueue.shift();
         persistQueue();
-        if (messageQueue.length === 0 && item.from !== currentUserId) {
-          sendReadAck([item.msgId]);
-        }
         setTimeout(flushQueue, 50);
       },
       fail(err) {
-        common_vendor.index.__f__("warn", "at utils/socket.js:187", "[socket] flushQueue 发送失败:", err);
+        common_vendor.index.__f__("warn", "at utils/socket.js:124", "[socket] flushQueue 发送失败:", err);
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:192", "[socket] flushQueue 异常:", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:128", "[socket] flushQueue 异常:", e);
   }
-};
+}
+function persistQueue() {
+  try {
+    common_vendor.index.setStorageSync(QUEUE_KEY, messageQueue);
+  } catch (e) {
+    common_vendor.index.__f__("error", "at utils/socket.js:134", "[socket] persistQueue error", e);
+  }
+}
+function loadQueueFromStorage() {
+  try {
+    const q = common_vendor.index.getStorageSync(QUEUE_KEY);
+    messageQueue = Array.isArray(q) ? q : [];
+  } catch (e) {
+    common_vendor.index.__f__("error", "at utils/socket.js:141", "[socket] loadQueueFromStorage error", e);
+    messageQueue = [];
+  }
+}
 function sendData(data, onStatusChange) {
-  if (onStatusChange && typeof onStatusChange === "function") {
+  if (onStatusChange)
     msgStatusCallbacks.set(data.msgId, onStatusChange);
-  }
   if (onStatusChange)
     onStatusChange("sending");
   if (connectStatus !== CONNECT_STATUS.CONNECTED || !socketTask) {
-    common_vendor.index.__f__("warn", "at utils/socket.js:206", "WebSocket 未连接，消息加入队列缓存", data);
     messageQueue.push(data);
     persistQueue();
     if (onStatusChange)
@@ -171,13 +151,11 @@ function sendData(data, onStatusChange) {
     socketTask.send({
       data: JSON.stringify(data),
       success() {
-        common_vendor.index.__f__("log", "at utils/socket.js:217", "[socket] 消息发送成功", data);
         if (onStatusChange)
           onStatusChange("success");
         msgStatusCallbacks.delete(data.msgId);
       },
       fail(err) {
-        common_vendor.index.__f__("error", "at utils/socket.js:222", "发送消息失败，加入缓存", err, data);
         messageQueue.push(data);
         persistQueue();
         if (onStatusChange)
@@ -186,7 +164,6 @@ function sendData(data, onStatusChange) {
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:230", "发送消息异常，消息加入缓存", e, data);
     messageQueue.push(data);
     persistQueue();
     if (onStatusChange)
@@ -199,9 +176,9 @@ function sendMsg(toUserId, msg, fromUserId, onStatusChange, msgId) {
     msgId,
     cmd: 2,
     type: "private",
-    from: fromUserId,
-    to: toUserId,
-    message: msg,
+    fromUser: fromUserId,
+    toUser: toUserId,
+    content: msg,
     timestamp: Date.now()
   };
   sendData(data, onStatusChange);
@@ -211,35 +188,27 @@ function sendGroupMsg(groupId, msg, fromUserId, onStatusChange, msgId) {
     msgId,
     cmd: 3,
     type: "group",
-    from: fromUserId,
-    to: groupId,
-    message: msg,
+    fromUser: fromUserId,
+    toUser: groupId,
+    content: msg,
     timestamp: Date.now()
   };
   sendData(data, onStatusChange);
 }
 function sendReadAck(msgIds) {
-  if (!Array.isArray(msgIds) || msgIds.length === 0) {
-    common_vendor.index.__f__("warn", "at utils/socket.js:275", "[socket] sendReadAck 缺少 msgIds");
+  if (!Array.isArray(msgIds) || msgIds.length === 0)
     return;
-  }
-  const ackData = {
-    cmd: 100,
-    msgIds
-  };
+  const ackData = { cmd: 100, fromUser: currentUserId, msgIds };
   if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
     try {
       socketTask.send({ data: JSON.stringify(ackData) });
-      common_vendor.index.__f__("log", "at utils/socket.js:286", "[socket] 发送已读确认:", ackData);
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:288", "[socket] 发送已读确认失败，改为入队列", e);
       messageQueue.push(ackData);
       persistQueue();
     }
   } else {
     messageQueue.push(ackData);
     persistQueue();
-    common_vendor.index.__f__("log", "at utils/socket.js:296", "[socket] read-ack 已入队列，等待重连后发送", ackData);
   }
 }
 function setReadAckHandler(callback) {
@@ -247,14 +216,12 @@ function setReadAckHandler(callback) {
 }
 function closeSocket() {
   if (socketTask) {
-    common_vendor.index.__f__("log", "at utils/socket.js:310", "[socket] 主动关闭 WebSocket 连接");
     socketTask.close();
     socketTask = null;
     connectStatus = CONNECT_STATUS.DISCONNECTED;
-    if (reconnectTimer) {
+    if (reconnectTimer)
       clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
+    reconnectTimer = null;
     reconnectCount = 0;
   }
 }

@@ -71,20 +71,20 @@ public class ChatWsHandler implements IWsMsgHandler {
     @Override
     public void onAfterHandshaked(HttpRequest httpRequest, HttpResponse httpResponse, ChannelContext channelContext) throws Exception {
         // 绑定默认群组，方便群聊消息分发
-        Tio.bindGroup(channelContext, ChatConst.GROUP_ID);
+        Tio.bindGroup(channelContext, ChatConst.GROUP_1);
 
         // 获取当前在线人数
         int count = Tio.getAll(channelContext.tioConfig).getObj().size();
 
         // 构造系统上线消息，通知所有用户
         ChatMessage sysMsg = new ChatMessage();
-        sysMsg.setFrom("屁");
-        sysMsg.setMessage(channelContext.userid + " 进来了，共【" + count + "】人在线");
+        sysMsg.setFromUser("屁");
+        sysMsg.setContent(channelContext.userid + " 进来了，共【" + count + "】人在线");
         String jsonMsg = JsonUtil.toJson(sysMsg);
 
         // 广播上线消息到默认群组
         WsResponse wsResponse = WsResponse.fromText(jsonMsg, CHARSET);
-        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID, wsResponse);
+        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_1, wsResponse);
 
         // 查询当前用户的离线消息
         List<ChatMessage> offlineMessages = ChatService.getOfflineMessages(channelContext.userid);
@@ -96,8 +96,8 @@ public class ChatWsHandler implements IWsMsgHandler {
                 WsResponse offlineResponse = WsResponse.fromText(offlineJson, CHARSET);
                 Tio.send(channelContext, offlineResponse);
             }
-            // 标记离线消息已读或删除，避免重复推送
-          // ChatService.markOfflineMessagesRead(channelContext.userid);
+             // 标记离线消息已读或删除，避免重复推送
+           ChatService.markOfflineMessagesDelivered(channelContext.userid);
         }
         // 5. 推送离线已读回执
         List<ChatMessage> receipts = ChatService.getOfflineReadReceipts(channelContext.userid);
@@ -130,13 +130,13 @@ public class ChatWsHandler implements IWsMsgHandler {
 
         // 构造下线消息
         ChatMessage sysMsg = new ChatMessage();
-        sysMsg.setFrom("屁");
-        sysMsg.setMessage(channelContext.userid + " 离开了，现在共有【" + count + "】人在线");
+        sysMsg.setFromUser("屁");
+        sysMsg.setContent(channelContext.userid + " 离开了，现在共有【" + count + "】人在线");
         String jsonMsg = JsonUtil.toJson(sysMsg);
 
         // 发送给默认群组，通知其他人
         WsResponse wsResponse = WsResponse.fromText(jsonMsg, CHARSET);
-        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID, wsResponse);
+        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_1, wsResponse);
 
         return null;
     }
@@ -157,18 +157,7 @@ public class ChatWsHandler implements IWsMsgHandler {
             log.debug("收到客户端消息: {}", text);
         }
 
-        ChatMessage chatMessage = null;
-        try {
-            chatMessage = JsonUtil.fromJson(text, ChatMessage.class);
-        } catch (Exception e) {
-            log.warn("消息解析失败，忽略消息: {}", text, e);
-            return null;
-        }
-
-        if (chatMessage == null) {
-            log.warn("无法解析消息: {}", text);
-            return null;
-        }
+        ChatMessage chatMessage = JsonUtil.fromJson(text, ChatMessage.class);
 
         Integer cmd = chatMessage.getCmd();
         if (cmd == null) {
@@ -186,30 +175,17 @@ public class ChatWsHandler implements IWsMsgHandler {
             switch (cmd) {
                 case 1:
                     // 登录命令，绑定用户并加入默认群组
-                    ChatService.bindUser(chatMessage.getFrom(), channelContext);
+                    ChatService.bindUser(chatMessage.getFromUser(), channelContext);
                     break;
                 case 2:
-                    // 私聊消息，保存离线消息后转发
-                    SetWithLock<ChannelContext> swl = Tio.getChannelContextsByUserid(channelContext.tioConfig, chatMessage.getTo());
-                    boolean online = swl != null && swl.getObj() != null && !swl.getObj().isEmpty();
-                    if (online) {
-                        ChatService.saveOnlineMessage(chatMessage);
-                        ChatService.sendPrivateMsg(chatMessage, channelContext);
-                    } else {
-                        ChatService.saveOfflineMessage(chatMessage);
-                    }
-
+                    ChatService.sendPrivateMsg(chatMessage, channelContext);
                     break;
                 case 3:
                     // 群聊消息转发
                     ChatService.sendGroupMsg(chatMessage, channelContext);
                     break;
                 case 100:
-                    // 处理客户端已读确认消息
-                    List<String> msgIds = chatMessage.getMsgIds();
-                    if (msgIds != null && !msgIds.isEmpty()) {
-                        ChatService.processReadAck(msgIds, channelContext.userid, channelContext); // 会处理在线+离线消息
-                    }
+                    ChatService.processReadAck(chatMessage.getMsgIds(), chatMessage.getFromUser(), channelContext);
                     break;
                 default:
                     log.warn("未知cmd命令: {}", cmd);
