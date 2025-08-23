@@ -2,7 +2,7 @@ let socketTask = null;
 let reconnectTimer = null;
 let reconnectCount = 0;
 const MAX_RECONNECT = 6;
-
+let onGroupHistory = null;  //批量群历史下发回调
 let currentUserId = null;
 let messageQueue = [];
 const QUEUE_KEY = 'socket_message_queue';
@@ -10,11 +10,7 @@ let onReadAck = null;
 
 const msgStatusCallbacks = new Map();
 
-const CONNECT_STATUS = {
-    DISCONNECTED: 0,
-    CONNECTING: 1,
-    CONNECTED: 2,
-};
+const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
 
 let activeTarget = null;
@@ -25,7 +21,7 @@ export function connectSocket(userId, onMessage) {
     currentUserId = userId;
     connectStatus = CONNECT_STATUS.CONNECTING;
 
-    const wsUrl = `ws://192.168.110.238:9326?name=${encodeURIComponent(userId)}`;
+    const wsUrl = `ws://172.20.10.18:9326?name=${encodeURIComponent(userId)}`;
 
     try {
         socketTask = uni.connectSocket({
@@ -44,11 +40,10 @@ export function connectSocket(userId, onMessage) {
         connectStatus = CONNECT_STATUS.CONNECTED;
         reconnectCount = 0;
 
-        const loginData = { cmd: 1, fromUser: currentUserId };
-        sendRaw(loginData);
+        sendRaw({ cmd: 1, fromUser: currentUserId });
 
         loadQueueFromStorage();
-        flushQueue(onMessage);
+        flushQueue();
     });
 
     socketTask.onMessage((res) => {
@@ -63,6 +58,12 @@ export function connectSocket(userId, onMessage) {
                 if (data.toUser === currentUserId) {
                     onReadAck && onReadAck(data.msgIds);
                 }
+                return;
+            }
+
+            // 批量群历史处理
+            if (Array.isArray(data) && data.length && data[0].cmd === 3) {
+                onGroupHistory && onGroupHistory(data);
                 return;
             }
 
@@ -174,29 +175,13 @@ function sendData(data, onStatusChange) {
     }
 }
 
-export function sendMsg(toUserId, msg, fromUserId, onStatusChange, msgId) {
-    const data = {
-        msgId,
-        cmd: 2,
-        type: 'private',
-        fromUser: fromUserId,
-        toUser: toUserId,
-        content: msg,
-        timestamp: Date.now(),
-    };
+export function sendMsg(msg, onStatusChange) {
+    const data = { cmd: 2, type: 'private', ...msg};
     sendData(data, onStatusChange);
 }
 
-export function sendGroupMsg(groupId, msg, fromUserId, onStatusChange, msgId) {
-    const data = {
-        msgId,
-        cmd: 3,
-        type: 'group',
-        fromUser: fromUserId,
-        toUser: groupId,
-        content: msg,
-        timestamp: Date.now(),
-    };
+export function sendGroupMsg(msg, onStatusChange) {
+    const data = { cmd: 3, type: 'group', ...msg};
     sendData(data, onStatusChange);
 }
 
@@ -213,10 +198,18 @@ export function sendReadAck(msgIds) {
     }
 }
 
+export function sendGroupCursor(groupId, lastMsgId) {
+    if (!groupId) return;
+    const data = { cmd: 102, fromUser: currentUserId, groupId, lastMsgId, timestamp: Date.now() };
+    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
+        try { socketTask.send({ data: JSON.stringify(data) });}
+        catch (e) { console.error('[socket] sendGroupCursor error', e); }
+    }
+}
+
+export function setGroupHistoryHandler(callback) { onGroupHistory = callback; }
 export function setReadAckHandler(callback) { onReadAck = callback; }
-
 export function setActiveTarget(targetId) { activeTarget = targetId; }
-
 export function closeSocket() {
     if (socketTask) {
         socketTask.close();
@@ -227,5 +220,4 @@ export function closeSocket() {
         reconnectCount = 0;
     }
 }
-
 export function isConnected() { return connectStatus === CONNECT_STATUS.CONNECTED; }

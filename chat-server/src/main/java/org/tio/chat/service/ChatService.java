@@ -9,6 +9,7 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 import org.tio.chat.config.ChatServerConfig;
 import org.tio.chat.constant.ChatConst;
+import org.tio.chat.mapper.ChatGroupMapper;
 import org.tio.chat.model.ChatMessage;
 import org.tio.chat.starter.ChatServerStarter;
 import org.tio.chat.util.JsonUtil;
@@ -23,6 +24,8 @@ import java.io.Reader;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+
+
 /**
  * ChatService
  * - 消息入库（MySQL / MyBatis）
@@ -36,7 +39,7 @@ public class ChatService {
     private static final TioConfig TIO = ChatServerStarter.getTioServerConfig();
 
     // -------------------- MyBatis（无 Spring） --------------------
-    private static final SqlSessionFactory SQL_SESSION_FACTORY;
+    static final SqlSessionFactory SQL_SESSION_FACTORY;
     static {
         try (Reader reader = Resources.getResourceAsReader("mybatis-config.xml")) {
             SQL_SESSION_FACTORY = new SqlSessionFactoryBuilder().build(reader);
@@ -48,10 +51,15 @@ public class ChatService {
     // -------------------- Redis（Lettuce） --------------------
     private static final RedisClient REDIS = RedisClient.create("redis://localhost:6379");
     private static final StatefulRedisConnection<String, String> CONN = REDIS.connect();
-    private static final RedisCommands<String, String> R = CONN.sync();
+    static final RedisCommands<String, String> R = CONN.sync();
 
     private static String offlineKey(String userId) { return "offline:" + userId; }
     private static String readAckKey(String userId) { return "readAck:" + userId; }
+    // "chat:group:msgs:" + groupId → 每个群对应一条 Redis Key
+    static String groupMsgKey(String groupId){ return "chat:group:msgs:" + groupId; } // List (JSON)
+    static String groupCursorKey(String groupId, String userId){ return "chat:group:cursor:" + groupId + ":" + userId; } // String (msgId)
+    static final int GROUP_RECENT_MAX = 200; // 每群 Redis 保留最近消息条数
+
 
     // -------------------- 在线消息内存索引 + TTL --------------------
     private static final long ONLINE_INDEX_TTL_MS = 10 * 60 * 1000L; // 10分钟
@@ -78,10 +86,13 @@ public class ChatService {
     public static void bindUser(String userId, ChannelContext ctx) {
         if (userId == null) return;
         Tio.bindUser(ctx, userId);
-        Tio.bindGroup(ctx, ChatConst.GROUP_1);
+        Tio.bindGroup(ctx, ChatConst.GROUP_ID);
     }
 
-    /** 私聊：写库 -> 在线判断 -> 发送或缓存离线 -> 维护在线索引 */
+
+    /**
+     * 私聊：写库 -> 在线判断 -> 发送或缓存离线 -> 维护在线索引
+     */
     public static void sendPrivateMsg(ChatMessage chatMessage, ChannelContext ctx) {
         if (chatMessage == null || chatMessage.getToUser() == null) return;
 
@@ -108,20 +119,32 @@ public class ChatService {
         }
     }
 
-    /** 群聊：写库 -> 群发（不做已读逻辑） */
+    /**
+     * 群聊：写库 -> 群发（不做已读逻辑）
+     */
     public static void sendGroupMsg(ChatMessage chatMessage, ChannelContext ctx) {
         if (chatMessage == null || chatMessage.getGroupId() == null) return;
-        final String gid = chatMessage.getToUser();
+
+        String gid = chatMessage.getGroupId();
+        if (gid == null || gid.isEmpty()) {
+            gid = chatMessage.getToUser();
+            chatMessage.setGroupId(gid);
+        }
         chatMessage.setCmd(3);
-        chatMessage.setGroupId(gid);
-        chatMessage.setToUser(null); // 群聊不使用 to_user
         chatMessage.setOffline(false); // 群聊不计离线（历史另行查询）
 
         insertMessage(chatMessage);
 
+
+        // 写redis缓存最近50条信息
+        String json = JsonUtil.toJson(chatMessage);
+        R.lpush(groupMsgKey(gid), json);
+        R.ltrim(groupMsgKey(gid), 0, GROUP_RECENT_MAX - 1); // 只保留最近 50 条
+
         WsResponse resp = WsResponse.fromText(JsonUtil.toJson(chatMessage), ChatServerConfig.CHARSET);
         Tio.sendToGroup(ctx.tioConfig, chatMessage.getGroupId(), resp);
     }
+
 
     // -------------------- 离线消息（消息体） --------------------
 

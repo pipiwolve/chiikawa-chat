@@ -4,45 +4,41 @@ let socketTask = null;
 let reconnectTimer = null;
 let reconnectCount = 0;
 const MAX_RECONNECT = 6;
+let onGroupHistory = null;
 let currentUserId = null;
 let messageQueue = [];
 const QUEUE_KEY = "socket_message_queue";
 let onReadAck = null;
 const msgStatusCallbacks = /* @__PURE__ */ new Map();
-const CONNECT_STATUS = {
-  DISCONNECTED: 0,
-  CONNECTING: 1,
-  CONNECTED: 2
-};
+const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
 function connectSocket(userId, onMessage) {
   if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING)
     return;
   currentUserId = userId;
   connectStatus = CONNECT_STATUS.CONNECTING;
-  const wsUrl = `ws://192.168.110.238:9326?name=${encodeURIComponent(userId)}`;
+  const wsUrl = `ws://172.20.10.18:9326?name=${encodeURIComponent(userId)}`;
   try {
     socketTask = common_vendor.index.connectSocket({
       url: wsUrl,
       success() {
-        common_vendor.index.__f__("log", "at utils/socket.js:33", "WebSocket 连接请求已发起");
+        common_vendor.index.__f__("log", "at utils/socket.js:29", "WebSocket 连接请求已发起");
       },
       fail(err) {
-        common_vendor.index.__f__("error", "at utils/socket.js:34", "WebSocket 连接请求失败", err);
+        common_vendor.index.__f__("error", "at utils/socket.js:30", "WebSocket 连接请求失败", err);
         attemptReconnect(onMessage);
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:37", "WebSocket 连接异常", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:33", "WebSocket 连接异常", e);
     attemptReconnect(onMessage);
     return;
   }
   socketTask.onOpen(() => {
-    common_vendor.index.__f__("log", "at utils/socket.js:43", "📡 WebSocket 已打开");
+    common_vendor.index.__f__("log", "at utils/socket.js:39", "📡 WebSocket 已打开");
     connectStatus = CONNECT_STATUS.CONNECTED;
     reconnectCount = 0;
-    const loginData = { cmd: 1, fromUser: currentUserId };
-    sendRaw(loginData);
+    sendRaw({ cmd: 1, fromUser: currentUserId });
     loadQueueFromStorage();
     flushQueue();
   });
@@ -58,18 +54,22 @@ function connectSocket(userId, onMessage) {
         }
         return;
       }
+      if (Array.isArray(data) && data.length && data[0].cmd === 3) {
+        onGroupHistory && onGroupHistory(data);
+        return;
+      }
       onMessage && onMessage(data);
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:72", "消息解析错误", e, dataStr);
+      common_vendor.index.__f__("error", "at utils/socket.js:73", "消息解析错误", e, dataStr);
     }
   });
   socketTask.onClose(() => {
-    common_vendor.index.__f__("log", "at utils/socket.js:77", "WebSocket 已关闭");
+    common_vendor.index.__f__("log", "at utils/socket.js:78", "WebSocket 已关闭");
     connectStatus = CONNECT_STATUS.DISCONNECTED;
     attemptReconnect(onMessage);
   });
   socketTask.onError((err) => {
-    common_vendor.index.__f__("error", "at utils/socket.js:83", "WebSocket 错误", err);
+    common_vendor.index.__f__("error", "at utils/socket.js:84", "WebSocket 错误", err);
     connectStatus = CONNECT_STATUS.DISCONNECTED;
     attemptReconnect(onMessage);
   });
@@ -91,10 +91,10 @@ function sendRaw(data) {
     try {
       socketTask.send({ data: JSON.stringify(data) });
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:105", "[socket] 发送消息异常", e, data);
+      common_vendor.index.__f__("error", "at utils/socket.js:106", "[socket] 发送消息异常", e, data);
     }
   } else {
-    common_vendor.index.__f__("warn", "at utils/socket.js:107", "[socket] WebSocket未连接，无法发送消息:", data);
+    common_vendor.index.__f__("warn", "at utils/socket.js:108", "[socket] WebSocket未连接，无法发送消息:", data);
   }
 }
 function flushQueue() {
@@ -112,18 +112,18 @@ function flushQueue() {
         setTimeout(flushQueue, 50);
       },
       fail(err) {
-        common_vendor.index.__f__("warn", "at utils/socket.js:124", "[socket] flushQueue 发送失败:", err);
+        common_vendor.index.__f__("warn", "at utils/socket.js:125", "[socket] flushQueue 发送失败:", err);
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:128", "[socket] flushQueue 异常:", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:129", "[socket] flushQueue 异常:", e);
   }
 }
 function persistQueue() {
   try {
     common_vendor.index.setStorageSync(QUEUE_KEY, messageQueue);
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:134", "[socket] persistQueue error", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:135", "[socket] persistQueue error", e);
   }
 }
 function loadQueueFromStorage() {
@@ -131,7 +131,7 @@ function loadQueueFromStorage() {
     const q = common_vendor.index.getStorageSync(QUEUE_KEY);
     messageQueue = Array.isArray(q) ? q : [];
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:141", "[socket] loadQueueFromStorage error", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:142", "[socket] loadQueueFromStorage error", e);
     messageQueue = [];
   }
 }
@@ -171,28 +171,12 @@ function sendData(data, onStatusChange) {
     msgStatusCallbacks.delete(data.msgId);
   }
 }
-function sendMsg(toUserId, msg, fromUserId, onStatusChange, msgId) {
-  const data = {
-    msgId,
-    cmd: 2,
-    type: "private",
-    fromUser: fromUserId,
-    toUser: toUserId,
-    content: msg,
-    timestamp: Date.now()
-  };
+function sendMsg(msg, onStatusChange) {
+  const data = { cmd: 2, type: "private", ...msg };
   sendData(data, onStatusChange);
 }
-function sendGroupMsg(groupId, msg, fromUserId, onStatusChange, msgId) {
-  const data = {
-    msgId,
-    cmd: 3,
-    type: "group",
-    fromUser: fromUserId,
-    toUser: groupId,
-    content: msg,
-    timestamp: Date.now()
-  };
+function sendGroupMsg(msg, onStatusChange) {
+  const data = { cmd: 3, type: "group", ...msg };
   sendData(data, onStatusChange);
 }
 function sendReadAck(msgIds) {
@@ -210,6 +194,21 @@ function sendReadAck(msgIds) {
     messageQueue.push(ackData);
     persistQueue();
   }
+}
+function sendGroupCursor(groupId, lastMsgId) {
+  if (!groupId)
+    return;
+  const data = { cmd: 102, fromUser: currentUserId, groupId, lastMsgId, timestamp: Date.now() };
+  if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
+    try {
+      socketTask.send({ data: JSON.stringify(data) });
+    } catch (e) {
+      common_vendor.index.__f__("error", "at utils/socket.js:206", "[socket] sendGroupCursor error", e);
+    }
+  }
+}
+function setGroupHistoryHandler(callback) {
+  onGroupHistory = callback;
 }
 function setReadAckHandler(callback) {
   onReadAck = callback;
@@ -231,8 +230,10 @@ function isConnected() {
 exports.closeSocket = closeSocket;
 exports.connectSocket = connectSocket;
 exports.isConnected = isConnected;
+exports.sendGroupCursor = sendGroupCursor;
 exports.sendGroupMsg = sendGroupMsg;
 exports.sendMsg = sendMsg;
 exports.sendReadAck = sendReadAck;
+exports.setGroupHistoryHandler = setGroupHistoryHandler;
 exports.setReadAckHandler = setReadAckHandler;
 //# sourceMappingURL=../../.sourcemap/mp-weixin/utils/socket.js.map

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="org.tio.chat.mapper.ChatGroupMapper">
+
+    <!-- 新建群 -->
+    <insert id="insertGroup" parameterType="org.tio.chat.model.ChatGroup">
+        INSERT INTO chat_group (group_id, group_name)
+        VALUES (#{groupId}, #{groupName})
+    </insert>
+
+    <!-- 添加成员 -->
+    <insert id="addMember" parameterType="org.tio.chat.model.ChatGroupMember">
+        INSERT INTO chat_group_member (group_id, user_id)
+        VALUES (#{groupId}, #{userId})
+            ON DUPLICATE KEY UPDATE join_time = NOW()
+    </insert>
+
+    <!-- 查询群成员 -->
+    <select id="getGroupMembers" parameterType="string" resultType="string">
+        SELECT user_id FROM chat_group_member WHERE group_id = #{groupId}
+    </select>
+
+    <!-- 查询用户所在群 -->
+    <select id="getUserGroups" parameterType="string" resultType="string">
+        SELECT group_id FROM chat_group_member WHERE user_id = #{userId}
+    </select>
+
+    <!-- 更新群成员已读游标 -->
+    <update id="updateLastReadCursor">
+        UPDATE chat_group_member
+        SET last_read_msg_id = #{msgId}
+        WHERE group_id = #{groupId} AND user_id = #{userId}
+    </update>
+
+    <!-- 查询群成员已读游标 -->
+    <select id="getLastReadCursor" resultType="string">
+        SELECT last_read_msg_id
+        FROM chat_group_member
+        WHERE group_id = #{groupId} AND user_id = #{userId}
+    </select>
+
+    <!-- 插入或更新群聊已读游标 -->
+    <insert id="upsertCursor">
+        INSERT INTO chat_group_cursor (user_id, group_id, last_read_msg_id, update_time)
+        VALUES (#{userId}, #{groupId}, #{lastReadMsgId}, NOW())
+            ON DUPLICATE KEY UPDATE
+                                 last_read_msg_id = VALUES(last_read_msg_id),
+                                 update_time = NOW()
+    </insert>
+
+    <!-- 查询某群在指定 msgId 之后的消息（用于回放） -->
+    <select id="selectGroupMessagesSince" resultType="org.tio.chat.model.ChatMessage">
+        SELECT id, msg_id as msgId, from_user as fromUser, to_user as toUser, group_id as groupId,
+               content, cmd, is_read as isRead, is_offline as isOffline, create_time as createTime
+        FROM chat_message
+        WHERE group_id = #{groupId}
+          AND cmd = 3
+          AND create_time >
+              COALESCE((
+                           SELECT cm2.create_time
+                           FROM chat_message cm2
+                           WHERE cm2.group_id = #{groupId}
+                             AND cm2.msg_id = #{cursorMsgId}
+                           LIMIT 1
+                           ), '1970-01-01')
+        ORDER BY create_time ASC
+        LIMIT #{limit}
+    </select>
+</mapper>

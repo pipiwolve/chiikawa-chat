@@ -15,7 +15,7 @@ import org.tio.utils.lock.SetWithLock;
 import org.tio.websocket.common.WsRequest;
 import org.tio.websocket.common.WsResponse;
 import org.tio.websocket.server.handler.IWsMsgHandler;
-
+import org.tio.chat.service.ChatGroupService;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,8 +37,9 @@ public class ChatWsHandler implements IWsMsgHandler {
 
     /**
      * WebSocket 握手阶段，绑定用户ID，确保连接和用户绑定。
-     * @param request HTTP请求
-     * @param httpResponse HTTP响应
+     *
+     * @param request        HTTP请求
+     * @param httpResponse   HTTP响应
      * @param channelContext 连接上下文
      * @return HttpResponse 返回握手响应或null拒绝握手
      * @throws Exception
@@ -63,15 +64,16 @@ public class ChatWsHandler implements IWsMsgHandler {
 
     /**
      * 握手完成后，加入默认群组并广播上线通知，使用统一的消息格式。
-     * @param httpRequest HTTP请求
-     * @param httpResponse HTTP响应
+     *
+     * @param httpRequest    HTTP请求
+     * @param httpResponse   HTTP响应
      * @param channelContext 连接上下文
      * @throws Exception
      */
     @Override
     public void onAfterHandshaked(HttpRequest httpRequest, HttpResponse httpResponse, ChannelContext channelContext) throws Exception {
         // 绑定默认群组，方便群聊消息分发
-        Tio.bindGroup(channelContext, ChatConst.GROUP_1);
+        Tio.bindGroup(channelContext, ChatConst.GROUP_ID);
 
         // 获取当前在线人数
         int count = Tio.getAll(channelContext.tioConfig).getObj().size();
@@ -84,7 +86,7 @@ public class ChatWsHandler implements IWsMsgHandler {
 
         // 广播上线消息到默认群组
         WsResponse wsResponse = WsResponse.fromText(jsonMsg, CHARSET);
-        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_1, wsResponse);
+        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID, wsResponse);
 
         // 查询当前用户的离线消息
         List<ChatMessage> offlineMessages = ChatService.getOfflineMessages(channelContext.userid);
@@ -96,8 +98,8 @@ public class ChatWsHandler implements IWsMsgHandler {
                 WsResponse offlineResponse = WsResponse.fromText(offlineJson, CHARSET);
                 Tio.send(channelContext, offlineResponse);
             }
-             // 标记离线消息已读或删除，避免重复推送
-           ChatService.markOfflineMessagesDelivered(channelContext.userid);
+            // 标记离线消息已读或删除，避免重复推送
+            ChatService.markOfflineMessagesDelivered(channelContext.userid);
         }
         // 5. 推送离线已读回执
         List<ChatMessage> receipts = ChatService.getOfflineReadReceipts(channelContext.userid);
@@ -112,41 +114,13 @@ public class ChatWsHandler implements IWsMsgHandler {
 
     }
 
-    @Override
-    public Object onBytes(WsRequest wsRequest, byte[] bytes, ChannelContext channelContext) throws Exception {
-        // 不支持二进制消息，忽略
-        return null;
-    }
-
-    @Override
-    public Object onClose(WsRequest wsRequest, byte[] bytes, ChannelContext channelContext) throws Exception {
-        // 连接关闭时的广播通知，属于连接生命周期事件，建议迁移
-
-        // 移除连接
-        Tio.remove(channelContext, "客户端主动关闭连接");
-
-        // 获取当前在线人数，减去当前关闭的连接
-        int count = Tio.getAll(channelContext.tioConfig).getObj().size() - 1;
-
-        // 构造下线消息
-        ChatMessage sysMsg = new ChatMessage();
-        sysMsg.setFromUser("屁");
-        sysMsg.setContent(channelContext.userid + " 离开了，现在共有【" + count + "】人在线");
-        String jsonMsg = JsonUtil.toJson(sysMsg);
-
-        // 发送给默认群组，通知其他人
-        WsResponse wsResponse = WsResponse.fromText(jsonMsg, CHARSET);
-        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_1, wsResponse);
-
-        return null;
-    }
-
 
     /**
      * 核心的文本消息处理入口，调用 ChatService 处理业务逻辑。
      * 新增对消息唯一标识 msgId 的处理，保证消息唯一性和确认机制。
-     * @param wsRequest WebSocket请求
-     * @param text 文本消息内容
+     *
+     * @param wsRequest      WebSocket请求
+     * @param text           文本消息内容
      * @param channelContext 连接上下文
      * @return Object 返回null表示不回复
      * @throws Exception
@@ -175,7 +149,21 @@ public class ChatWsHandler implements IWsMsgHandler {
             switch (cmd) {
                 case 1:
                     // 登录命令，绑定用户并加入默认群组
-                    ChatService.bindUser(chatMessage.getFromUser(), channelContext);
+                     String userId = chatMessage.getFromUser();
+                    if (userId != null) {
+                        Tio.bindUser(channelContext, userId);
+
+                        // 绑定用户所在的所有群组
+                        List<String> groupIds = ChatGroupService.getUserGroupIds(userId);
+                        if (groupIds != null) {
+                            for (String gid : groupIds) {
+                                Tio.bindGroup(channelContext, gid);
+                                System.out.println("用户 " + userId + " 绑定到群组 " + gid);
+                            }
+                        }
+                        // 上线后补发按游标未读的群聊历史
+                        ChatGroupService.replayGroupHistoryOnLogin(userId, channelContext);
+                    }
                     break;
                 case 2:
                     ChatService.sendPrivateMsg(chatMessage, channelContext);
@@ -184,16 +172,57 @@ public class ChatWsHandler implements IWsMsgHandler {
                     // 群聊消息转发
                     ChatService.sendGroupMsg(chatMessage, channelContext);
                     break;
-                case 100:
+
+                case 100: // 私聊已读回执
                     ChatService.processReadAck(chatMessage.getMsgIds(), chatMessage.getFromUser(), channelContext);
                     break;
-                default:
-                    log.warn("未知cmd命令: {}", cmd);
+
+                case 102: // 群聊已读游标更新
+                    ChatGroupService.updateGroupReadCursor(chatMessage.getFromUser(), chatMessage.getGroupId(), chatMessage.getMsgId());
+                    // 这里可以扩展：通知群组其他成员该用户已读到哪里
+                    ChatGroupService.broadcastGroupCursor(chatMessage, channelContext);
+                    break;
+
+                case 201: // 加入群聊
+                    ChatGroupService.joinGroup(chatMessage.getGroupId(), chatMessage.getFromUser(), channelContext);
+                    break;
             }
-        } catch (Exception e) {
-            log.error("处理消息异常: {}", text, e);
+        return null;
+    } catch (Exception e) {
+            throw new RuntimeException(e);
         }
+    }
+
+
+
+    @Override
+    public Object onBytes(WsRequest wsRequest, byte[] bytes, ChannelContext channelContext) throws Exception {
+        // 不支持二进制消息，忽略
+        return null;
+    }
+
+    @Override
+    public Object onClose(WsRequest wsRequest, byte[] bytes, ChannelContext channelContext) throws Exception {
+        // 连接关闭时的广播通知，属于连接生命周期事件，建议迁移
+
+        // 移除连接
+        Tio.remove(channelContext, "客户端主动关闭连接");
+
+        // 获取当前在线人数，减去当前关闭的连接
+        int count = Tio.getAll(channelContext.tioConfig).getObj().size() - 1;
+
+        // 构造下线消息
+        ChatMessage sysMsg = new ChatMessage();
+        sysMsg.setFromUser("屁");
+        sysMsg.setContent(channelContext.userid + " 离开了，现在共有【" + count + "】人在线");
+        String jsonMsg = JsonUtil.toJson(sysMsg);
+
+        // 发送给默认群组，通知其他人
+        WsResponse wsResponse = WsResponse.fromText(jsonMsg, CHARSET);
+        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID, wsResponse);
 
         return null;
     }
+
 }
+
