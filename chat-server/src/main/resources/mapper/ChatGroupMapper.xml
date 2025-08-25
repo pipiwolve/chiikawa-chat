@@ -30,7 +30,7 @@
     <!-- 更新群成员已读游标 -->
     <update id="updateLastReadCursor">
         UPDATE chat_group_member
-        SET last_read_msg_id = #{msgId}
+        SET last_read_msg_id = # {msgId}
         WHERE group_id = #{groupId} AND user_id = #{userId}
     </update>
 

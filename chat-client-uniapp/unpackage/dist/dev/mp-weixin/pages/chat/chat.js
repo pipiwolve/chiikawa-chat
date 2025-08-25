@@ -1,6 +1,6 @@
 "use strict";
-const common_vendor = require("../../common/vendor.js");
 const utils_socket = require("../../utils/socket.js");
+const common_vendor = require("../../common/vendor.js");
 const ContactList = () => "../../components/ContactList.js";
 const GroupList = () => "../../components/GroupList.js";
 const _sfc_main = {
@@ -34,7 +34,6 @@ const _sfc_main = {
   },
   computed: {
     currentMessages() {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:109", "[Debug] currentMessages computed -> targetType:", this.targetType, "targetId:", this.targetId);
       return this.targetType === "private" ? this.messages : this.groupMessages[this.targetId] || [];
     }
   },
@@ -43,7 +42,6 @@ const _sfc_main = {
     this.userId = options.userId || "user1";
     this.targetId = ((_a = this.contacts.concat(this.groups).find((c) => c.id !== this.userId)) == null ? void 0 : _a.id) || "";
     this.targetType = this.contacts.find((c) => c.id === this.targetId) ? "private" : "group";
-    common_vendor.index.__f__("log", "at pages/chat/chat.vue:120", "[Debug] onLoad -> targetId:", this.targetId, "targetType:", this.targetType);
     this.connectionStatus = "连接中...";
     utils_socket.setReadAckHandler((msgIds) => {
       const list = Array.isArray(msgIds) ? msgIds : [msgIds];
@@ -138,14 +136,12 @@ const _sfc_main = {
     handleSelectUser(id) {
       this.targetId = id;
       this.targetType = "private";
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:228", "[Debug] handleSelectUser -> targetId:", this.targetId, "targetType:", this.targetType);
     },
     // 选择群组
     handleSelectGroup(gid) {
       this.targetId = gid;
       this.targetType = "group";
       this.unreadGroupCount[gid] = 0;
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:235", "[Debug] handleSelectGroup -> targetId:", this.targetId, "targetType:", this.targetType);
     },
     // 已读 ACK 回调
     handleReadAck(msgIds) {

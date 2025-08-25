@@ -106,18 +106,17 @@ export default {
   },
   computed: {
     currentMessages() {
-      console.log('[Debug] currentMessages computed -> targetType:', this.targetType, 'targetId:', this.targetId);
       return this.targetType === 'private'
           ? this.messages
           : (this.groupMessages[this.targetId] || [])
     }
   },
   onLoad(options) {
+    // 选择非非自己的第一个用户或者群组
     this.userId = options.userId || 'user1';
     this.targetId = this.contacts.concat(this.groups).find(c => c.id !== this.userId)?.id || '';
     this.targetType = this.contacts.find(c => c.id === this.targetId) ? 'private' : 'group';
 
-    console.log('[Debug] onLoad -> targetId:', this.targetId, 'targetType:', this.targetType);
     this.connectionStatus = '连接中...'
 
     // 注册已读 ACK 回调
@@ -143,10 +142,12 @@ export default {
         const unreadMsgIds = unreadOfflineMsgs.map(m => m.msgId).filter(Boolean)
         if (unreadMsgIds.length > 0) this.collectUnreadMsgIds(unreadMsgIds)
         this.$nextTick(() => { this.scrollTop = 100000 })
+
       } else if (msg.cmd === 3) {
         // 群聊消息
         const gid = msg.groupId
         if (!gid) return
+        // 读历史群聊信息
         if (!this.groupMessages[gid]) this.$set(this.groupMessages, gid, [])
 
         const exists = this.groupMessages[gid].some(m => m.msgId === msg.msgId)
@@ -221,19 +222,17 @@ export default {
       this.inputMsg = ''
       this.$nextTick(() => { this.scrollTop = 100000 })
     },
+
     // 选择联系人
     handleSelectUser(id) {
       this.targetId = id
       this.targetType = 'private'
-      console.log('[Debug] handleSelectUser -> targetId:', this.targetId, 'targetType:', this.targetType);
     },
     // 选择群组
     handleSelectGroup(gid) {
       this.targetId = gid
       this.targetType = 'group'
       this.unreadGroupCount[gid] = 0
-      console.log('[Debug] handleSelectGroup -> targetId:', this.targetId, 'targetType:', this.targetType);
-
     },
     // 已读 ACK 回调
     handleReadAck(msgIds) {
@@ -245,6 +244,7 @@ export default {
         }
       })
     },
+
     // 收集私聊已读消息ID
     collectUnreadMsgIds(ids) {
       this.unreadMsgIdsBuffer.push(...ids)
@@ -256,7 +256,9 @@ export default {
         this.unreadMsgIdsTimer = null
       }, 300)
     },
+
     loadMoreMessages() { /* 分页留空 */ },
+
     disconnect() { closeSocket() },
     formatTimestamp(ts) {
       const d = new Date(ts)

@@ -75,19 +75,6 @@ public class ChatGroupService {
         return chatGroupMapper.getLastReadCursor(groupId, userId);
     }
 
-    /**
-     * 插入群聊游标到数据库
-     */
-    public static void insertGroupReadCursor(String userId, String groupId, String lastReadMsgId) {
-        // 数据库操作使用 SqlSessionFactory
-        try (SqlSession s = SQL_SESSION_FACTORY.openSession()) {
-            ChatGroupMapper mapper = s.getMapper(ChatGroupMapper.class);
-            mapper.upsertCursor(userId, groupId, lastReadMsgId);
-            s.commit();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
     /**
      * 上线补发所有群的“游标之后”的历史消息（优先redis,不足回落db）

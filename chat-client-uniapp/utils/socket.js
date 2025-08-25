@@ -21,7 +21,7 @@ export function connectSocket(userId, onMessage) {
     currentUserId = userId;
     connectStatus = CONNECT_STATUS.CONNECTING;
 
-    const wsUrl = `ws://172.20.10.18:9326?name=${encodeURIComponent(userId)}`;
+    const wsUrl = `ws://192.168.110.238:9326?name=${encodeURIComponent(userId)}`;
 
     try {
         socketTask = uni.connectSocket({
@@ -200,7 +200,7 @@ export function sendReadAck(msgIds) {
 
 export function sendGroupCursor(groupId, lastMsgId) {
     if (!groupId) return;
-    const data = { cmd: 102, fromUser: currentUserId, groupId, lastMsgId, timestamp: Date.now() };
+    const data = { cmd: 102, fromUser: currentUserId, groupId, msgId:lastMsgId, timestamp: Date.now() };
     if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
         try { socketTask.send({ data: JSON.stringify(data) });}
         catch (e) { console.error('[socket] sendGroupCursor error', e); }
