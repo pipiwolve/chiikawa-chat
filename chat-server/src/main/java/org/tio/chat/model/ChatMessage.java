@@ -39,4 +39,7 @@ public class ChatMessage implements Serializable {
 
     private boolean isOffline;
     private String groupId;
+
+    private Integer PageNum;
+    private Integer PageSize;
 }

@@ -12,7 +12,12 @@ import org.tio.websocket.common.WsResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+
+import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
+
 
 import static org.tio.chat.service.ChatService.*;
 
@@ -164,5 +169,30 @@ public class ChatGroupService {
         WsResponse resp = WsResponse.fromText(JsonUtil.toJson(notify), ChatServerConfig.CHARSET);
         // 广播给群里所有人（包括发送方自己，可根据需求排除）
         Tio.sendToGroup(ctx.tioConfig, cursorMsg.getGroupId(), resp);
+    }
+
+    public static List<ChatMessage> loadGroupHistory(String userId, String groupId, Integer pageNum, Integer pageSize) {
+        if (userId == null || groupId == null) return Collections.emptyList();
+        pageNum = pageNum != null ? pageNum : 1;
+        pageSize = pageSize != null ? pageSize : 20;
+
+        // 获取用户群已读游标
+        String lastCursor = R.get(groupCursorKey(groupId, userId));
+        Date cursorTime = null;
+        if (lastCursor != null) {
+            cursorTime = chatGroupMapper.getCreateTimeByMsgId(lastCursor); // 根据 msgId 查询 create_time
+        } else {
+            cursorTime = new Date(); // 默认最新时间
+        }
+
+        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession()) {
+            ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
+
+            // 分页查询
+            PageHelper.startPage(pageNum, pageSize);
+            List<ChatMessage> messages = mapper.selectGroupHistory(groupId, cursorTime);
+
+            return messages != null ? messages : Collections.emptyList();
+        }
     }
 }

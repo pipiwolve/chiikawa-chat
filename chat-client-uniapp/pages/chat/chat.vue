@@ -1,28 +1,26 @@
 <template>
   <view class="chat-container">
     <!-- 联系人/群组列表 -->
-    <ContactList
-        :users="contacts"
-        :selectedUserId="targetId"
-        @select="handleSelectUser"
-    />
-    <GroupList
-        :groups="groups"
-        :selectedGroupId="targetId"
-        @select="handleSelectGroup"
-    />
+    <ContactList :users="contacts" :selectedUserId="targetId" @select="handleSelectUser" />
+    <GroupList :groups="groups" :selectedGroupId="targetId" @select="handleSelectGroup" />
 
-    <!-- 消息显示区 -->
-    <scroll-view
-        scroll-y
-        class="msg-list"
-        :scroll-top="scrollTop"
-        @scrolltolower="loadMoreMessages"
-    >
-      <view
-          v-for="(item, index) in currentMessages"
-          :key="item.msgId || index"
-          :class="[
+    <!-- 消息区右侧 -->
+    <view class="chat-right">
+      <!-- 顶部标题 -->
+      <view class="chat-header">{{ currentTargetName }}</view>
+
+      <!-- 消息列表 -->
+      <scroll-view
+          scroll-y
+          class="msg-list"
+          :scroll-top="scrollTop"
+          @scrolltoupper="loadMoreMessages"
+          scroll-with-animation
+      >
+        <view
+            v-for="(item, index) in currentMessages"
+            :key="item.msgId || index"
+            :class="[
           'msg-item',
           item.fromUser === userId ? 'msg-sent' : 'msg-received',
           item.isOffline ? 'offline-msg' : '',
@@ -32,35 +30,39 @@
             ? 'msg-isRead'
             : ''
         ]"
-      >
-        <view class="msg-nickname">{{ item.nickname || item.fromUser }}</view>
-        <view class="msg-content">{{ item.content }}</view>
-        <view class="msg-timestamp">{{ formatTimestamp(item.timestamp) }}</view>
+        >
+          <view class="msg-nickname">{{ item.nickname || item.fromUser }}</view>
+          <view class="msg-content">{{ item.content }}</view>
+          <view class="msg-timestamp">{{ formatTimestamp(item.timestamp) }}</view>
 
-        <!-- 私聊才显示已读/未读状态 -->
-        <view v-if="item.fromUser === userId && item.type === 'private'" class="msg-status">
-          <text v-if="item.status === 'sending'">发送中...</text>
-          <text v-else-if="item.status === 'failed'">
-            <button @click="retrySend(item)">重试</button>
-          </text>
-          <text v-else-if="item.status === 'success'">未读</text>
-          <text v-else-if="item.status === 'isRead'">已读</text>
+          <!-- 私聊状态 -->
+          <view v-if="item.fromUser === userId && item.type === 'private'" class="msg-status">
+            <text v-if="item.status === 'sending'">发送中...</text>
+            <text v-else-if="item.status === 'failed'">
+              <button @click="retrySend(item)">重试</button>
+            </text>
+            <text v-else-if="item.status === 'success'">未读</text>
+            <text v-else-if="item.status === 'isRead'">已读</text>
+          </view>
         </view>
+
+        <view v-if="loadingHistory" class="loading-tip">加载中...</view>
+      </scroll-view>
+
+      <!-- 输入栏固定底部 -->
+      <view class="chat-input-bar">
+        <input v-model="inputMsg" placeholder="输入消息..." class="msg-input" />
+        <button @click="sendMsg">发送</button>
       </view>
-    </scroll-view>
-
-    <!-- 输入框 -->
-    <view class="input-box">
-      <input v-model="inputMsg" placeholder="输入消息..." class="msg-input" />
-      <button @click="sendMsg">发送</button>
     </view>
-
-    <!-- 调试用 -->
-    <view>
-      <button @click="disconnect">断开连接</button>
-    </view>
-    <view class="status">连接状态: {{ connectionStatus }}</view>
   </view>
+
+<!--    &lt;!&ndash; 调试用 &ndash;&gt;-->
+<!--    <view>-->
+<!--      <button @click="disconnect">断开连接</button>-->
+<!--    </view>-->
+<!--    <view class="status">连接状态: {{ connectionStatus }}</view>-->
+
 </template>
 
 <script>
@@ -73,7 +75,8 @@ import {
   setReadAckHandler,
   sendReadAck,
   sendGroupCursor,
-  setGroupHistoryHandler
+  setGroupHistoryHandler,
+  sendGroupHistoryRequest
 } from '@/utils/socket.js'
 import ContactList from '@/components/ContactList.vue'
 import GroupList from '@/components/GroupList.vue'
@@ -101,7 +104,11 @@ export default {
       scrollTop: 0,
       msgStatusMap: {},
       unreadMsgIdsBuffer: [],
-      unreadMsgIdsTimer: null
+      unreadMsgIdsTimer: null,
+
+      groupPageNum: 1,
+      groupPageSize: 20,
+      groupHasMore: true
     }
   },
   computed: {
@@ -126,7 +133,13 @@ export default {
     })
 
     // 注册群聊历史回调
-    setGroupHistoryHandler((arr) => this.mergeGroupHistory(arr))
+    setGroupHistoryHandler((arr) => {
+      if (!Array.isArray(arr) || arr.length === 0) {
+        this.groupHasMore = false;
+        return;
+      }
+      this.mergeGroupHistory(arr);
+    });
 
     // 连接 WebSocket
     connectSocket(this.userId, (msg) => {
@@ -147,7 +160,6 @@ export default {
         // 群聊消息
         const gid = msg.groupId
         if (!gid) return
-        // 读历史群聊信息
         if (!this.groupMessages[gid]) this.$set(this.groupMessages, gid, [])
 
         const exists = this.groupMessages[gid].some(m => m.msgId === msg.msgId)
@@ -257,7 +269,15 @@ export default {
       }, 300)
     },
 
-    loadMoreMessages() { /* 分页留空 */ },
+    // 滚动加载历史消息
+    loadMoreMessages() {
+      if (this.targetType !== 'group' || !this.groupHasMore) return;
+      const groupId = this.targetId;
+      const pageNum = this.groupPageNum + 1;
+      sendGroupHistoryRequest(groupId, pageNum, this.groupPageSize);
+      this.groupPageNum = pageNum;
+    },
+
 
     disconnect() { closeSocket() },
     formatTimestamp(ts) {
@@ -274,11 +294,14 @@ export default {
     },
     // 合并群聊历史
     mergeGroupHistory(arr) {
-      if (!Array.isArray(arr)) return
+      if (!Array.isArray(arr) || arr.length === 0) {
+        this.groupHasMore = false;
+        return;
+      }
       arr.forEach(m => {
-        if (!this.groupMessages[m.groupId]) this.$set(this.groupMessages, m.groupId, [])
-        this.groupMessages[m.groupId].push(m)
-      })
+        if (!this.groupMessages[m.groupId]) this.$set(this.groupMessages, m.groupId, []);
+        this.groupMessages[m.groupId].unshift(m); // 插入到顶部
+      });
     },
     // 防抖上报群游标
     debounceSendGroupCursor: (function () {
@@ -298,14 +321,29 @@ export default {
 <style>
 .chat-container {
   display: flex;
+  height: 100vh;
+}
+
+.chat-right {
+  display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+}
+
+.chat-header {
+  height: 50px;
+  line-height: 50px;
+  background: #f7f7f7;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 10px;
+  font-weight: bold;
 }
 
 .msg-list {
   flex: 1;
   padding: 10px;
   overflow-y: auto;
+  background-color: #fff;
 }
 
 .msg-item {
@@ -320,7 +358,7 @@ export default {
   padding-bottom: 18px;
 }
 
-/* 自己发的消息右对齐，背景颜色不同 */
+/* 自己发的消息右对齐 */
 .msg-sent {
   align-self: flex-end;
   background-color: #DCF8C6;
@@ -333,13 +371,6 @@ export default {
   border: 1px solid #ddd;
 }
 
-/* 已读显示 */
-.msg-isRead {
-  color: #4caf50;
-  font-weight: 500;
-  opacity: 1;
-}
-
 .msg-status {
   position: absolute;
   bottom: 2px;
@@ -350,76 +381,27 @@ export default {
   align-items: center;
 }
 
-.msg-status text {
-  margin-left: 6px;
-}
-.msg-status text:nth-child(3) {
-  color: #999; /* 未读灰色 */
-  font-weight: 500;
-}
-.msg-status text:nth-child(4) {
-  color: #4caf50; /* 已读绿色 */
-}
-
-/* 离线消息样式 */
-.offline-msg {
-  border-left: 4px solid #ff9800;
-  background-color: #fff8e1;
-}
-
-/* 发送中消息样式，半透明 */
-.msg-sending {
-  opacity: 0.7;
-}
-
-/* 发送失败消息样式，红色字体 */
-.msg-failed {
-  color: red;
-}
-
-.msg-nickname {
-  font-weight: bold;
-  font-size: 12px;
-  margin-bottom: 4px;
-  color: #555;
-}
-
-.msg-content {
-  font-size: 14px;
-  color: #333;
-}
-
-.msg-timestamp {
-  font-size: 10px;
-  color: #999;
-  align-self: flex-end;
-  margin-top: 4px;
-  margin-bottom: 2px;
-}
-
-.input-box {
+.chat-input-bar {
   display: flex;
-  padding: 10px;
+  height: 50px;
+  border-top: 1px solid #e0e0e0;
+  background: #f9f9f9;
+  align-items: center;
+  padding: 0 10px;
 }
 
 .msg-input {
   flex: 1;
   border: 1px solid #ccc;
-  padding: 5px;
-}
-
-.status {
+  border-radius: 20px;
   padding: 5px 10px;
-  font-size: 12px;
-  color: #888;
 }
 
-.msg-status button {
-  margin-left: 6px;
-  font-size: 12px;
-  color: #f56c6c;
-  background: transparent;
-  border: none;
-  cursor: pointer;
+.chat-input-bar button {
+  margin-left: 10px;
+  padding: 5px 15px;
+  border-radius: 4px;
+  background-color: #2e89ff;
+  color: #fff;
 }
 </style>

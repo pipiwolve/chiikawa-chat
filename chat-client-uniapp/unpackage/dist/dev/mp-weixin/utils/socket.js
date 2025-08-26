@@ -54,7 +54,7 @@ function connectSocket(userId, onMessage) {
         }
         return;
       }
-      if (Array.isArray(data) && data.length && data[0].cmd === 3) {
+      if (Array.isArray(data) && data.length && (data[0].cmd === 3 || data[0].cmd === 103)) {
         onGroupHistory && onGroupHistory(data);
         return;
       }
@@ -203,7 +203,26 @@ function sendGroupCursor(groupId, lastMsgId) {
     try {
       socketTask.send({ data: JSON.stringify(data) });
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:206", "[socket] sendGroupCursor error", e);
+      common_vendor.index.__f__("error", "at utils/socket.js:205", "[socket] sendGroupCursor error", e);
+    }
+  }
+}
+function sendGroupHistoryRequest(groupId, pageNum, pageSize) {
+  if (!groupId)
+    return;
+  const data = {
+    cmd: 103,
+    fromUser: currentUserId,
+    groupId,
+    pageNum,
+    pageSize,
+    timestamp: Date.now()
+  };
+  if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
+    try {
+      socketTask.send({ data: JSON.stringify(data) });
+    } catch (e) {
+      common_vendor.index.__f__("error", "at utils/socket.js:222", "[socket] sendGroupHistoryRequest error", e);
     }
   }
 }
@@ -231,6 +250,7 @@ exports.closeSocket = closeSocket;
 exports.connectSocket = connectSocket;
 exports.isConnected = isConnected;
 exports.sendGroupCursor = sendGroupCursor;
+exports.sendGroupHistoryRequest = sendGroupHistoryRequest;
 exports.sendGroupMsg = sendGroupMsg;
 exports.sendMsg = sendMsg;
 exports.sendReadAck = sendReadAck;

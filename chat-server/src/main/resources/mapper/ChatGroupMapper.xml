@@ -30,7 +30,7 @@
     <!-- 更新群成员已读游标 -->
     <update id="updateLastReadCursor">
         UPDATE chat_group_member
-        SET last_read_msg_id = # {msgId}
+        SET last_read_msg_id = #{msgId}
         WHERE group_id = #{groupId} AND user_id = #{userId}
     </update>
 
@@ -68,4 +68,25 @@
         ORDER BY create_time ASC
         LIMIT #{limit}
     </select>
+
+
+    <!-- 通过游标id取到游标时间 -->
+    <select id="getCreateTimeByMsgId" resultType="java.util.Date">
+        SELECT update_time
+        FROM chat_group_cursor
+        WHERE last_read_msg_id = #{lastCursor}
+    </select>
+
+    <!-- 查询群聊历史消息，按创建时间倒序 -->
+    <select id="selectGroupHistory" resultType="org.tio.chat.model.ChatMessage">
+        <![CDATA[
+        SELECT msg_id, from_user, to_user, group_id, content, cmd, is_read, is_offline, create_time
+        FROM chat_message
+        WHERE group_id = #{groupId}
+        AND create_time <= #{cursorTime}
+        ORDER BY create_time DESC
+        ]]>
+    </select>
+
+
 </mapper>

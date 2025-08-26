@@ -16,10 +16,13 @@ import org.tio.websocket.common.WsRequest;
 import org.tio.websocket.common.WsResponse;
 import org.tio.websocket.server.handler.IWsMsgHandler;
 import org.tio.chat.service.ChatGroupService;
+
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
-import static org.tio.chat.service.ChatService.processReadAck;
+
+
 
 /**
  * ChatWsHandler 是 t-io WebSocket 服务端的核心消息处理器。
@@ -183,6 +186,13 @@ public class ChatWsHandler implements IWsMsgHandler {
                     ChatGroupService.broadcastGroupCursor(chatMessage, channelContext);
                     break;
 
+                case 103: {
+                    List<ChatMessage> history = ChatGroupService.loadGroupHistory(chatMessage.getFromUser(), chatMessage.getGroupId(), chatMessage.getPageNum(), chatMessage.getPageSize());
+
+                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(history), ChatServerConfig.CHARSET);
+                    Tio.sendToUser(channelContext.tioConfig, chatMessage.getFromUser(), resp);
+                    break;
+                }
                 case 201: // 加入群聊
                     ChatGroupService.joinGroup(chatMessage.getGroupId(), chatMessage.getFromUser(), channelContext);
                     break;

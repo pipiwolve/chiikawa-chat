@@ -62,7 +62,7 @@ export function connectSocket(userId, onMessage) {
             }
 
             // 批量群历史处理
-            if (Array.isArray(data) && data.length && data[0].cmd === 3) {
+            if (Array.isArray(data) && data.length && (data[0].cmd === 3 || data[0].cmd === 103)) {
                 onGroupHistory && onGroupHistory(data);
                 return;
             }
@@ -179,7 +179,6 @@ export function sendMsg(msg, onStatusChange) {
     const data = { cmd: 2, type: 'private', ...msg};
     sendData(data, onStatusChange);
 }
-
 export function sendGroupMsg(msg, onStatusChange) {
     const data = { cmd: 3, type: 'group', ...msg};
     sendData(data, onStatusChange);
@@ -204,6 +203,24 @@ export function sendGroupCursor(groupId, lastMsgId) {
     if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
         try { socketTask.send({ data: JSON.stringify(data) });}
         catch (e) { console.error('[socket] sendGroupCursor error', e); }
+    }
+}
+export function sendGroupHistoryRequest(groupId, pageNum, pageSize) {
+    if (!groupId) return;
+    const data = {
+        cmd: 103,
+        fromUser: currentUserId,
+        groupId,
+        pageNum,
+        pageSize,
+        timestamp: Date.now()
+    };
+    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
+        try {
+            socketTask.send({ data: JSON.stringify(data) });
+        } catch (e) {
+            console.error('[socket] sendGroupHistoryRequest error', e);
+        }
     }
 }
 

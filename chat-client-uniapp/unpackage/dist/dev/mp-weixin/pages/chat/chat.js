@@ -29,7 +29,10 @@ const _sfc_main = {
       scrollTop: 0,
       msgStatusMap: {},
       unreadMsgIdsBuffer: [],
-      unreadMsgIdsTimer: null
+      unreadMsgIdsTimer: null,
+      groupPageNum: 1,
+      groupPageSize: 20,
+      groupHasMore: true
     };
   },
   computed: {
@@ -47,7 +50,13 @@ const _sfc_main = {
       const list = Array.isArray(msgIds) ? msgIds : [msgIds];
       this.handleReadAck(list);
     });
-    utils_socket.setGroupHistoryHandler((arr) => this.mergeGroupHistory(arr));
+    utils_socket.setGroupHistoryHandler((arr) => {
+      if (!Array.isArray(arr) || arr.length === 0) {
+        this.groupHasMore = false;
+        return;
+      }
+      this.mergeGroupHistory(arr);
+    });
     utils_socket.connectSocket(this.userId, (msg) => {
       if (Array.isArray(msg)) {
         const offlineMsgs = msg.map((m) => ({ ...m, isOffline: true, status: null }));
@@ -166,7 +175,14 @@ const _sfc_main = {
         this.unreadMsgIdsTimer = null;
       }, 300);
     },
+    // 滚动加载历史消息
     loadMoreMessages() {
+      if (this.targetType !== "group" || !this.groupHasMore)
+        return;
+      const groupId = this.targetId;
+      const pageNum = this.groupPageNum + 1;
+      utils_socket.sendGroupHistoryRequest(groupId, pageNum, this.groupPageSize);
+      this.groupPageNum = pageNum;
     },
     disconnect() {
       utils_socket.closeSocket();
@@ -185,12 +201,14 @@ const _sfc_main = {
     },
     // 合并群聊历史
     mergeGroupHistory(arr) {
-      if (!Array.isArray(arr))
+      if (!Array.isArray(arr) || arr.length === 0) {
+        this.groupHasMore = false;
         return;
+      }
       arr.forEach((m) => {
         if (!this.groupMessages[m.groupId])
           this.$set(this.groupMessages, m.groupId, []);
-        this.groupMessages[m.groupId].push(m);
+        this.groupMessages[m.groupId].unshift(m);
       });
     },
     // 防抖上报群游标
@@ -213,7 +231,7 @@ if (!Array) {
   (_component_ContactList + _component_GroupList)();
 }
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
-  return {
+  return common_vendor.e({
     a: common_vendor.o($options.handleSelectUser),
     b: common_vendor.p({
       users: $data.contacts,
@@ -224,7 +242,8 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
       groups: $data.groups,
       selectedGroupId: $data.targetId
     }),
-    e: common_vendor.f($options.currentMessages, (item, index, i0) => {
+    e: common_vendor.t(_ctx.currentTargetName),
+    f: common_vendor.f($options.currentMessages, (item, index, i0) => {
       return common_vendor.e({
         a: common_vendor.t(item.nickname || item.fromUser),
         b: common_vendor.t(item.content),
@@ -247,14 +266,14 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
         o: common_vendor.n(item.status === "isRead" && item.fromUser === $data.userId && item.type === "private" ? "msg-isRead" : "")
       });
     }),
-    f: $data.scrollTop,
-    g: common_vendor.o((...args) => $options.loadMoreMessages && $options.loadMoreMessages(...args)),
-    h: $data.inputMsg,
-    i: common_vendor.o(($event) => $data.inputMsg = $event.detail.value),
-    j: common_vendor.o((...args) => $options.sendMsg && $options.sendMsg(...args)),
-    k: common_vendor.o((...args) => $options.disconnect && $options.disconnect(...args)),
-    l: common_vendor.t($data.connectionStatus)
-  };
+    g: _ctx.loadingHistory
+  }, _ctx.loadingHistory ? {} : {}, {
+    h: $data.scrollTop,
+    i: common_vendor.o((...args) => $options.loadMoreMessages && $options.loadMoreMessages(...args)),
+    j: $data.inputMsg,
+    k: common_vendor.o(($event) => $data.inputMsg = $event.detail.value),
+    l: common_vendor.o((...args) => $options.sendMsg && $options.sendMsg(...args))
+  });
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
 wx.createPage(MiniProgramPage);

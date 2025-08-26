@@ -5,6 +5,7 @@ import org.tio.chat.model.ChatGroup;
 import org.tio.chat.model.ChatGroupMember;
 import org.tio.chat.model.ChatMessage;
 
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -87,4 +88,23 @@ public interface ChatGroupMapper {
     List<ChatMessage> selectGroupMessagesSince(@Param("groupId") String groupId,
                                                @Param("cursorMsgId") String cursorMsgId,
                                                @Param("limit") int limit);
+
+
+    /**
+     * 通过游标id取得游标时间
+     * @param lastCursor
+     * @return
+     */
+    Date getCreateTimeByMsgId(@Param("lastCursor") String lastCursor);
+
+    /**
+     * 加载历史信息
+     * @param groupId
+     * @param cursorTime
+     * @return
+     */
+    List<ChatMessage> selectGroupHistory(@Param("groupId") String groupId,
+                                         @Param("cursorTime") Date cursorTime);
+
+
 }
