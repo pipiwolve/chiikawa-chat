@@ -1,13 +1,13 @@
 
-.container {
+.index-container {
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
 }
 button {
   margin: 10px 0;
-  padding: 12px;
-  background-color: #007AFF;
-  color: white;
-  border-radius: 6px;
+  width: 200px;
+  height: 40px;
 }

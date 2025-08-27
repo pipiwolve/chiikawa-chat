@@ -10,7 +10,11 @@ import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 import org.tio.chat.config.ChatServerConfig;
 import org.tio.chat.constant.ChatConst;
 import org.tio.chat.mapper.ChatGroupMapper;
+import org.tio.chat.mapper.ChatMessageMapper;
+import org.tio.chat.mapper.ChatUserMapper;
+import org.tio.chat.model.ChatGroup;
 import org.tio.chat.model.ChatMessage;
+import org.tio.chat.model.ChatUser;
 import org.tio.chat.starter.ChatServerStarter;
 import org.tio.chat.util.JsonUtil;
 import org.tio.core.ChannelContext;
@@ -79,6 +83,7 @@ public class ChatService {
             }
         }
     }
+
 
     // -------------------- 绑定/分发 --------------------
 
@@ -308,6 +313,7 @@ public class ChatService {
             }
         }
     }
+
 
     // -------------------- 辅助：在线判断 --------------------
 

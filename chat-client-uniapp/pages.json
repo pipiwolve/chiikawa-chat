@@ -5,13 +5,32 @@
 			"navigationBarTitleText": "uni-app"
 		}
 	},
-
 		{
 			"path": "pages/chat/chat",
 			"style": {
 				"navigationBarTitleText": "聊天"
 			}
-		}],
+		},
+		{
+			"path": "pages/login/login",
+			"style": {
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/register/register",
+			"style": {
+				"navigationBarTitleText": "注册"
+			}
+		},
+		{
+			"path": "pages/sessions/sessions",
+			"style": {
+				"navigationBarTitleText": "消息中心"
+			}
+		}
+	],
+
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
 		"navigationBarTitleText": "uni-app",

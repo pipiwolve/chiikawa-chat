@@ -5,7 +5,11 @@ import org.slf4j.LoggerFactory;
 import org.tio.chat.config.ChatServerConfig;
 import org.tio.chat.constant.ChatConst;
 import org.tio.chat.model.ChatMessage;
+import org.tio.chat.model.ChatSession;
+import org.tio.chat.model.ChatUser;
 import org.tio.chat.service.ChatService;
+import org.tio.chat.service.ChatSessionService;
+import org.tio.chat.service.ChatUserService;
 import org.tio.chat.util.JsonUtil;
 import org.tio.core.ChannelContext;
 import org.tio.core.Tio;
@@ -17,11 +21,7 @@ import org.tio.websocket.common.WsResponse;
 import org.tio.websocket.server.handler.IWsMsgHandler;
 import org.tio.chat.service.ChatGroupService;
 
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
-
-
+import java.util.*;
 
 
 /**
@@ -50,17 +50,7 @@ public class ChatWsHandler implements IWsMsgHandler {
     @Override
     public HttpResponse handshake(HttpRequest request, HttpResponse httpResponse, ChannelContext channelContext) throws Exception {
         String clientIp = request.getClientIp();
-        String userId = request.getParam("name");
-
-        // 校验用户ID参数，确保非空
-        if (userId == null || userId.trim().isEmpty()) {
-            log.warn("握手失败，未传入有效的用户ID参数 name，客户端IP: {}", clientIp);
-            return null;
-        }
-
-        // 绑定用户ID到连接上下文
-        Tio.bindUser(channelContext, userId);
-        log.info("用户 [{}] 从 [{}] 发起 WebSocket 握手", userId, clientIp);
+        log.info("新连接来自 [{}]", clientIp);
 
         return httpResponse;
     }
@@ -75,46 +65,7 @@ public class ChatWsHandler implements IWsMsgHandler {
      */
     @Override
     public void onAfterHandshaked(HttpRequest httpRequest, HttpResponse httpResponse, ChannelContext channelContext) throws Exception {
-        // 绑定默认群组，方便群聊消息分发
-        Tio.bindGroup(channelContext, ChatConst.GROUP_ID);
-
-        // 获取当前在线人数
-        int count = Tio.getAll(channelContext.tioConfig).getObj().size();
-
-        // 构造系统上线消息，通知所有用户
-        ChatMessage sysMsg = new ChatMessage();
-        sysMsg.setFromUser("屁");
-        sysMsg.setContent(channelContext.userid + " 进来了，共【" + count + "】人在线");
-        String jsonMsg = JsonUtil.toJson(sysMsg);
-
-        // 广播上线消息到默认群组
-        WsResponse wsResponse = WsResponse.fromText(jsonMsg, CHARSET);
-        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID, wsResponse);
-
-        // 查询当前用户的离线消息
-        List<ChatMessage> offlineMessages = ChatService.getOfflineMessages(channelContext.userid);
-
-        // 推送离线消息给当前用户
-        if (offlineMessages != null && !offlineMessages.isEmpty()) {
-            for (ChatMessage offlineMsg : offlineMessages) {
-                String offlineJson = JsonUtil.toJson(offlineMsg);
-                WsResponse offlineResponse = WsResponse.fromText(offlineJson, CHARSET);
-                Tio.send(channelContext, offlineResponse);
-            }
-            // 标记离线消息已读或删除，避免重复推送
-            ChatService.markOfflineMessagesDelivered(channelContext.userid);
-        }
-        // 5. 推送离线已读回执
-        List<ChatMessage> receipts = ChatService.getOfflineReadReceipts(channelContext.userid);
-        if (receipts != null && !receipts.isEmpty()) {
-            log.info("用户 [{}] 上线，推送 {} 条离线已读回执", channelContext.userid, receipts.size());
-            for (ChatMessage receipt : receipts) {
-                WsResponse resp = WsResponse.fromText(JsonUtil.toJson(receipt), ChatServerConfig.CHARSET);
-                Tio.send(channelContext, resp);
-            }
-            ChatService.clearOfflineReadReceipts(channelContext.userid);
-        }
-
+        log.info("握手完成，等待用户发送登录消息后再绑定 userId 和群组");
     }
 
 
@@ -150,24 +101,6 @@ public class ChatWsHandler implements IWsMsgHandler {
 
         try {
             switch (cmd) {
-                case 1:
-                    // 登录命令，绑定用户并加入默认群组
-                     String userId = chatMessage.getFromUser();
-                    if (userId != null) {
-                        Tio.bindUser(channelContext, userId);
-
-                        // 绑定用户所在的所有群组
-                        List<String> groupIds = ChatGroupService.getUserGroupIds(userId);
-                        if (groupIds != null) {
-                            for (String gid : groupIds) {
-                                Tio.bindGroup(channelContext, gid);
-                                System.out.println("用户 " + userId + " 绑定到群组 " + gid);
-                            }
-                        }
-                        // 上线后补发按游标未读的群聊历史
-                        ChatGroupService.replayGroupHistoryOnLogin(userId, channelContext);
-                    }
-                    break;
                 case 2:
                     ChatService.sendPrivateMsg(chatMessage, channelContext);
                     break;
@@ -175,6 +108,44 @@ public class ChatWsHandler implements IWsMsgHandler {
                     // 群聊消息转发
                     ChatService.sendGroupMsg(chatMessage, channelContext);
                     break;
+
+                case 10: { // 注册
+                    String userId = chatMessage.getFromUser();
+                    String password = chatMessage.getContent(); // content 存密码
+                    String nickname = chatMessage.getNickname();
+
+                    boolean ok = ChatUserService.register(userId, password, nickname);
+
+                    Map<String, Object> respMap = new HashMap<>();
+                    respMap.put("cmd", 10);
+                    respMap.put("result", ok ? "ok" : "fail");
+
+                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(respMap), ChatServerConfig.CHARSET);
+                    Tio.send(channelContext, resp);
+                    break;
+                }
+
+                case 11: { // 登录
+                    String userId = chatMessage.getFromUser();
+                    String password = chatMessage.getContent();
+
+                    ChatUser user = ChatUserService.login(userId, password);
+                    Map<String, Object> result = new HashMap<>();
+
+                    if (user != null) {
+                        result.put("cmd", 11);
+                        result.put("result", "ok");
+                        result.put("nickname", user.getUsername());
+
+                        handleUserLoginSuccess(user, userId, channelContext);
+                    } else {
+                        result.put("cmd", 11);
+                        result.put("result", "fail");
+                    }
+                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(result), ChatServerConfig.CHARSET);
+                    Tio.send(channelContext, resp);
+                    break;
+                }
 
                 case 100: // 私聊已读回执
                     ChatService.processReadAck(chatMessage.getMsgIds(), chatMessage.getFromUser(), channelContext);
@@ -186,13 +157,24 @@ public class ChatWsHandler implements IWsMsgHandler {
                     ChatGroupService.broadcastGroupCursor(chatMessage, channelContext);
                     break;
 
-                case 103: {
+                case 103: { // 历史信息加载
                     List<ChatMessage> history = ChatGroupService.loadGroupHistory(chatMessage.getFromUser(), chatMessage.getGroupId(), chatMessage.getPageNum(), chatMessage.getPageSize());
 
                     WsResponse resp = WsResponse.fromText(JsonUtil.toJson(history), ChatServerConfig.CHARSET);
                     Tio.sendToUser(channelContext.tioConfig, chatMessage.getFromUser(), resp);
                     break;
                 }
+
+                case 200: { // 获取最近会话列表
+                    String userId = chatMessage.getFromUser();
+                    if (userId == null || userId.trim().isEmpty()) return null;
+
+                    List<ChatSession> sessions = ChatSessionService.getRecentSessions(userId);
+                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(sessions), ChatServerConfig.CHARSET);
+                    Tio.send(channelContext, resp);
+                    break;
+                }
+
                 case 201: // 加入群聊
                     ChatGroupService.joinGroup(chatMessage.getGroupId(), chatMessage.getFromUser(), channelContext);
                     break;
@@ -203,7 +185,49 @@ public class ChatWsHandler implements IWsMsgHandler {
         }
     }
 
+    /**
+     * 登录成功后，绑定用户、群组，并推送离线消息与已读回执
+     */
+    private void handleUserLoginSuccess(ChatUser user, String userId, ChannelContext channelContext) {
+        // 1. 绑定 userId
+        Tio.bindUser(channelContext, userId);
+        log.info("用户 [{}] 登录成功，绑定到连接", userId);
 
+        // 2. 绑定群组
+        List<String> groupIds = ChatGroupService.getUserGroupIds(userId);
+        if (groupIds != null) {
+            for (String gid : groupIds) {
+                Tio.bindGroup(channelContext, gid);
+                log.info("用户 [{}] 加入群组 [{}]", userId, gid);
+            }
+        }
+
+        // 3. 系统消息：广播上线
+        int count = Tio.getAll(channelContext.tioConfig).getObj().size();
+        ChatMessage sysMsg = new ChatMessage();
+        sysMsg.setFromUser("系统");
+        sysMsg.setContent(user.getUsername() + " 上线了，共【" + count + "】人在线");
+        Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID,
+                WsResponse.fromText(JsonUtil.toJson(sysMsg), ChatServerConfig.CHARSET));
+
+        // 4. 推送离线消息
+        List<ChatMessage> offlineMessages = ChatService.getOfflineMessages(userId);
+        if (offlineMessages != null && !offlineMessages.isEmpty()) {
+            for (ChatMessage offlineMsg : offlineMessages) {
+                Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(offlineMsg), ChatServerConfig.CHARSET));
+            }
+            ChatService.markOfflineMessagesDelivered(userId);
+        }
+
+        // 5. 推送离线已读回执
+        List<ChatMessage> receipts = ChatService.getOfflineReadReceipts(userId);
+        if (receipts != null && !receipts.isEmpty()) {
+            for (ChatMessage receipt : receipts) {
+                Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(receipt), ChatServerConfig.CHARSET));
+            }
+            ChatService.clearOfflineReadReceipts(userId);
+        }
+    }
 
     @Override
     public Object onBytes(WsRequest wsRequest, byte[] bytes, ChannelContext channelContext) throws Exception {

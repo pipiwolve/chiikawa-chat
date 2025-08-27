@@ -62,4 +62,25 @@
         AND cmd = 2
     </select>
 
+        <!-- 查询用户私聊最近消息 -->
+        <select id="selectRecentPrivateMessages" resultType="org.tio.chat.model.ChatMessage">
+            SELECT *
+            FROM chat_message
+            WHERE (from_user = #{userId} OR to_user = #{userId})
+              AND cmd = 2
+            ORDER BY create_time DESC
+        </select>
+
+
+        <!-- 统计用户与某私聊对象未读消息数 -->
+        <select id="countUnreadPrivateMessages" resultType="int">
+            SELECT COUNT(*)
+            FROM chat_message
+            WHERE cmd = 2
+              AND from_user = #{otherUserId}
+              AND to_user = #{userId}
+              AND is_read = FALSE
+        </select>
+
+
 </mapper>

@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.tio.core.ChannelContext;
 import java.io.Serializable;
+import java.util.Calendar;
 import java.util.List;
 
 @Data
@@ -42,4 +43,5 @@ public class ChatMessage implements Serializable {
 
     private Integer PageNum;
     private Integer PageSize;
+
 }

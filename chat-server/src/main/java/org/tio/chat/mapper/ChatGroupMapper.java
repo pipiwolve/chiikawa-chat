@@ -107,4 +107,18 @@ public interface ChatGroupMapper {
                                          @Param("cursorTime") Date cursorTime);
 
 
+    /**
+     * 获取用户所在群组对象
+     * @param userId
+     * @return
+     */
+    List<ChatGroup> getUserGroupObjects(@Param("userId") String userId);
+
+    /**
+     * 计算群组未读信息
+     * @param userId
+     * @param groupId
+     * @return
+     */
+    Integer countUnreadGroupMessages(String userId, String groupId);
 }

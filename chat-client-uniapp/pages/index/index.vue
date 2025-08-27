@@ -1,34 +1,35 @@
 <template>
-  <view class="container">
-    <text>请选择登录用户：</text>
-    <button @click="goChat('user1')">用户一</button>
-    <button @click="goChat('user2')">用户二</button>
+  <view class="index-container">
+    <button @click="toLogin">登录</button>
+    <button @click="toRegister">注册</button>
   </view>
 </template>
 
 <script>
 export default {
   methods: {
-    goChat(userId) {
-      uni.navigateTo({
-        url: `/pages/chat/chat?userId=${userId}`
-      });
+    toLogin() {
+      uni.navigateTo({url: '/pages/login/login'});
+    },
+    toRegister() {
+      uni.navigateTo({url: '/pages/register/register'});
     }
   }
 }
 </script>
 
 <style>
-.container {
+.index-container {
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
 }
+
 button {
   margin: 10px 0;
-  padding: 12px;
-  background-color: #007AFF;
-  color: white;
-  border-radius: 6px;
+  width: 200px;
+  height: 40px;
 }
 </style>

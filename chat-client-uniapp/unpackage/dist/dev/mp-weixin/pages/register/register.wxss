@@ -1,0 +1,46 @@
+
+.register-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+.register-box {
+  width: 90%;
+  max-width: 350px;
+  padding: 20px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.input {
+  width: 100%;
+  margin-bottom: 15px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+.btn {
+  width: 100%;
+  padding: 10px;
+  background: #1AAD19;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+}
+.title {
+  font-size: 24px;
+  margin-bottom: 20px;
+  display: block;
+  text-align: center;
+}
+.link {
+  text-align: center;
+  margin-top: 10px;
+  color: #1AAD19;
+}
+.status {
+  margin-top: 10px;
+  color: #f00;
+  text-align: center;
+}

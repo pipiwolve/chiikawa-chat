@@ -27,6 +27,14 @@
         SELECT group_id FROM chat_group_member WHERE user_id = #{userId}
     </select>
 
+    <!-- 查询用户所在群组对象 -->
+    <select id="getUserGroupObjects" resultType="org.tio.chat.model.ChatGroup">
+        SELECT g.*
+        FROM chat_group g
+                 JOIN chat_group_member m ON g.group_id = m.group_id
+        WHERE m.user_id = #{userId}
+    </select>
+
     <!-- 更新群成员已读游标 -->
     <update id="updateLastReadCursor">
         UPDATE chat_group_member
@@ -87,6 +95,27 @@
         ORDER BY create_time DESC
         ]]>
     </select>
+
+    <!-- 查询群聊最后一条消息 -->
+    <select id="selectLastGroupMessage" resultType="org.tio.chat.model.ChatMessage">
+        SELECT *
+        FROM chat_message
+        WHERE group_id = #{groupId} AND cmd = 3
+        ORDER BY create_time DESC
+        LIMIT 1
+    </select>
+
+    <!-- 统计用户在群里的未读消息数 -->
+    <select id="countUnreadGroupMessages" resultType="int">
+        SELECT COUNT(*)
+        FROM chat_message cm
+                 LEFT JOIN chat_group_cursor c
+                           ON cm.group_id = c.group_id AND c.user_id = #{userId}
+        WHERE cm.group_id = #{groupId}
+          AND cm.cmd = 3
+          AND cm.create_time > COALESCE(c.create_time, '1970-01-01')
+    </select>
+
 
 
 </mapper>

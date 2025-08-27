@@ -1,6 +1,9 @@
 package org.tio.chat.starter;
 
+import org.tio.chat.handler.ChatHttpHandler;
 import org.tio.chat.listener.ChatServerIpStatListener;
+import org.tio.http.common.HttpConfig;
+import org.tio.http.server.HttpServerStarter;
 import org.tio.server.TioServerConfig;
 import org.tio.utils.jfinal.P;
 import org.tio.websocket.server.WsServerStarter;
@@ -49,4 +52,6 @@ public class ChatServerStarter {
         P.use("app.properties");
         start();
     }
+
+
 }

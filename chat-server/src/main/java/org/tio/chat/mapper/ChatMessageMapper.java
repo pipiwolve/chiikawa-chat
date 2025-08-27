@@ -23,4 +23,25 @@ public interface ChatMessageMapper {
     // 按 msgIds 查询发送方（用于回执 fallback）
     List<ChatMessage> selectSendersByMsgIds(@Param("msgIds") List<String> msgIds);
 
+    /**
+     * 查询用户私聊最近消息
+     * @param userId
+     * @return
+     */
+    List<ChatMessage> selectRecentPrivateMessages(@Param("userId") String userId);
+
+    /**
+     * 计算私聊未读信息
+     * @param userId
+     * @param targetId
+     * @return
+     */
+    Integer countUnreadPrivateMessages(@Param("userId")String userId,@Param("targetId") String targetId);
+
+    /**
+     * 查找最后一条群聊信息
+     * @param groupId
+     * @return
+     */
+    ChatMessage selectLastGroupMessage(@Param("groupId") String groupId);
 }

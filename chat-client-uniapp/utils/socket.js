@@ -2,17 +2,15 @@ let socketTask = null;
 let reconnectTimer = null;
 let reconnectCount = 0;
 const MAX_RECONNECT = 6;
-let onGroupHistory = null;  //批量群历史下发回调
+let onGroupHistory = null;
 let currentUserId = null;
 let messageQueue = [];
 const QUEUE_KEY = 'socket_message_queue';
 let onReadAck = null;
 
 const msgStatusCallbacks = new Map();
-
 const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
-
 let activeTarget = null;
 
 export function connectSocket(userId, onMessage) {
@@ -21,7 +19,7 @@ export function connectSocket(userId, onMessage) {
     currentUserId = userId;
     connectStatus = CONNECT_STATUS.CONNECTING;
 
-    const wsUrl = `ws://192.168.110.238:9326?name=${encodeURIComponent(userId)}`;
+    const wsUrl = `ws://192.168.110.238:9326`;
 
     try {
         socketTask = uni.connectSocket({
@@ -39,8 +37,6 @@ export function connectSocket(userId, onMessage) {
         console.log('📡 WebSocket 已打开');
         connectStatus = CONNECT_STATUS.CONNECTED;
         reconnectCount = 0;
-
-        sendRaw({ cmd: 1, fromUser: currentUserId });
 
         loadQueueFromStorage();
         flushQueue();
@@ -175,10 +171,27 @@ function sendData(data, onStatusChange) {
     }
 }
 
+// 🔹 新增通用业务消息发送函数
+export function sendCmdMessage(cmd, payload = {}, onStatusChange) {
+    const data = { cmd, fromUser: currentUserId, ...payload };
+    sendData(data, onStatusChange);
+}
+
+// 🔹 注册/登录封装
+export function sendRegister(userId, password, nickname) {
+    sendCmdMessage(10, { fromUser: userId, content: password, nickname });
+}
+
+export function sendLogin(userId, password) {
+    sendCmdMessage(11, { fromUser: userId, content: password });
+}
+
+// 保留私聊/群聊消息发送接口
 export function sendMsg(msg, onStatusChange) {
     const data = { cmd: 2, type: 'private', ...msg};
     sendData(data, onStatusChange);
 }
+
 export function sendGroupMsg(msg, onStatusChange) {
     const data = { cmd: 3, type: 'group', ...msg};
     sendData(data, onStatusChange);
@@ -186,8 +199,7 @@ export function sendGroupMsg(msg, onStatusChange) {
 
 export function sendReadAck(msgIds) {
     if (!Array.isArray(msgIds) || msgIds.length === 0) return;
-    const ackData = { cmd: 100,fromUser: currentUserId, msgIds };
-
+    const ackData = { cmd: 100, fromUser: currentUserId, msgIds };
     if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
         try { socketTask.send({ data: JSON.stringify(ackData) }); }
         catch (e) { messageQueue.push(ackData); persistQueue(); }
@@ -205,22 +217,13 @@ export function sendGroupCursor(groupId, lastMsgId) {
         catch (e) { console.error('[socket] sendGroupCursor error', e); }
     }
 }
+
 export function sendGroupHistoryRequest(groupId, pageNum, pageSize) {
     if (!groupId) return;
-    const data = {
-        cmd: 103,
-        fromUser: currentUserId,
-        groupId,
-        pageNum,
-        pageSize,
-        timestamp: Date.now()
-    };
+    const data = { cmd: 103, fromUser: currentUserId, groupId, pageNum, pageSize, timestamp: Date.now() };
     if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
-        try {
-            socketTask.send({ data: JSON.stringify(data) });
-        } catch (e) {
-            console.error('[socket] sendGroupHistoryRequest error', e);
-        }
+        try { socketTask.send({ data: JSON.stringify(data) });}
+        catch (e) { console.error('[socket] sendGroupHistoryRequest error', e); }
     }
 }
 
