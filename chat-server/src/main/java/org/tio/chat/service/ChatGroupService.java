@@ -246,7 +246,7 @@ public class ChatGroupService {
         notify.setFromUser(cursorMsg.getFromUser());
         notify.setGroupId(cursorMsg.getGroupId());
         notify.setMsgId(cursorMsg.getMsgId()); // 表示读到哪个 msgId
-        notify.setTimestamp(System.currentTimeMillis());
+        notify.setCreateTime(cursorMsg.getCreateTime());
 
         WsResponse resp = WsResponse.fromText(JsonUtil.toJson(notify), ChatServerConfig.CHARSET);
         // 广播给群里所有人（包括发送方自己，可根据需求排除）

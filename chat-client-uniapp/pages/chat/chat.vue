@@ -1,10 +1,6 @@
 <template>
   <view class="chat-container">
-    <!-- 联系人/群组列表 -->
-    <ContactList :users="contacts" :selectedUserId="targetId" @select="handleSelectUser" />
-    <GroupList :groups="groups" :selectedGroupId="targetId" @select="handleSelectGroup" />
-
-    <!-- 消息区右侧 -->
+    <!-- 右侧消息区 -->
     <view class="chat-right">
       <!-- 顶部标题 -->
       <view class="chat-header">{{ currentTargetName }}</view>
@@ -21,15 +17,15 @@
             v-for="(item, index) in currentMessages"
             :key="item.msgId || index"
             :class="[
-          'msg-item',
-          item.fromUser === userId ? 'msg-sent' : 'msg-received',
-          item.isOffline ? 'offline-msg' : '',
-          item.status === 'sending' ? 'msg-sending' : '',
-          item.status === 'failed' ? 'msg-failed' : '',
-          item.status === 'isRead' && item.fromUser === userId && item.type === 'private'
-            ? 'msg-isRead'
-            : ''
-        ]"
+            'msg-item',
+            item.fromUser === userId ? 'msg-sent' : 'msg-received',
+            item.isOffline ? 'offline-msg' : '',
+            item.status === 'sending' ? 'msg-sending' : '',
+            item.status === 'failed' ? 'msg-failed' : '',
+            item.status === 'isRead' && item.fromUser === userId && item.type === 'private'
+              ? 'msg-isRead'
+              : ''
+          ]"
         >
           <view class="msg-nickname">{{ item.nickname || item.fromUser }}</view>
           <view class="msg-content">{{ item.content }}</view>
@@ -69,30 +65,24 @@ import {
   sendReadAck,
   sendGroupCursor,
   setGroupHistoryHandler,
-  sendGroupHistoryRequest
+  sendGroupHistoryRequest,
+  onPrivateMessage,
+  onGroupMessage,
+  unregisterCmdHandler,
+  fetchOfflinePrivateMessages
 } from '@/utils/socket.js'
-import ContactList from '@/components/ContactList.vue'
-import GroupList from '@/components/GroupList.vue'
 
 export default {
-  components: {ContactList, GroupList},
   data() {
     return {
       messages: [],
       groupMessages: {},
-      unreadGroupCount: {},
       inputMsg: '',
       userId: '',
       targetId: '',
       targetType: '',
-      contacts: [
-        {id: 'user1', name: '用户一', type: 'user'},
-        {id: 'user2', name: '用户二', type: 'user'}
-      ],
-      groups: [
-        {id: 'group1', name: '群聊1', type: 'group'},
-        {id: 'group2', name: '群聊2', type: 'group'}
-      ],
+      currentTargetName: '',
+      currentTargetAvatar: '',
       connectionStatus: '未连接',
       scrollTop: 0,
       msgStatusMap: {},
@@ -105,206 +95,213 @@ export default {
       loadingHistory: false
     }
   },
-  computed: {
-    currentMessages() {
-      return this.targetType === 'private'
-          ? this.messages
-          : (this.groupMessages[this.targetId] || [])
-    },
-    currentTargetName() {
-      const contact = this.contacts.find(c => c.id === this.targetId);
-      if (contact) return contact.name;
-      const group = this.groups.find(g => g.id === this.targetId);
-      return group ? group.name : '';
-    }
-  },
-  onLoad(options) {
-    this.userId = options.userId || '';
-    this.connectionStatus = '连接中...';
 
-    setReadAckHandler(msgIds => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]));
+  onLoad(options) {
+    console.log('进入聊天页:', options)
+    this.userId = uni.getStorageSync('currentUserId') || ''
+    this.targetId = options.targetId
+    this.targetType = options.type
+    this.currentTargetName = options.name || ''
+    this.currentTargetAvatar = options.avatar || ''
+
+    this.connectionStatus = '连接中...'
+
+    // 注册已读/群历史
+    setReadAckHandler(msgIds => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]))
     setGroupHistoryHandler(arr => {
       if (!Array.isArray(arr) || arr.length === 0) {
-        this.groupHasMore = false;
-        return;
+        this.groupHasMore = false
+        return
       }
-      this.mergeGroupHistory(arr);
-    });
+      this.mergeGroupHistory(arr)
+    })
 
-    connectSocket(this.userId, msg => this.handleSocketMessage(msg));
+    if (this.targetType === 'private') {
+      // 拉取私聊离线消息
+      fetchOfflinePrivateMessages(this.targetId, (offlineMsgs) => {
+        if (Array.isArray(offlineMsgs)) {
+          offlineMsgs.forEach(m => this.messages.push({...m, isOffline: true, status: 'success'}))
+          // 发送已读 ack 防抖
+          const unreadIds = offlineMsgs.filter(m => m.fromUser === this.targetId).map(m => m.msgId)
+          if (unreadIds.length > 0) this.collectUnreadMsgIds(unreadIds)
+          this.$nextTick(() => { this.scrollTop = 100000 })
+        }
+      })
+    }
+
+    // 建立 socket
+    connectSocket(this.userId, msg => {
+      console.log("[WS] 收到消息:", msg)
+    })
+
+    onPrivateMessage(msg => this.handleSocketMessage(msg))
+    onGroupMessage(msg => this.handleSocketMessage(msg))
+
+
+
+    if (this.targetType === 'group') {
+      sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize)
+    }
 
     setInterval(() => {
-      this.connectionStatus = isConnected() ? '已连接' : '未连接';
-    }, 1000);
+      this.connectionStatus = isConnected() ? '已连接' : '未连接'
+    }, 1000)
   },
+
+  onUnload() {
+    unregisterCmdHandler(2) // 避免重复注册
+    unregisterCmdHandler(3)
+  },
+
   methods: {
+    /** 处理 socket 收到的消息 */
     handleSocketMessage(msg) {
-      if (msg.cmd === 10) { // 注册回执
-        this.statusMsg = msg.result === 'ok' ? '注册成功，请登录' : '注册失败';
-        return;
-      }
-      if (msg.cmd === 11) { // 登录回执
-        if (msg.result === 'ok') {
-          this.userId = msg.fromUser || this.userId;
-          this.statusMsg = '登录成功';
+      console.log("进入 handleSocketMessage:", msg)
 
-          const firstContact = this.contacts.find(c => c.id !== this.userId);
-          this.targetId = firstContact ? firstContact.id : '';
-          this.targetType = this.contacts.find(c => c.id === this.targetId) ? 'private' : 'group';
+      // 私聊消息
+      if (msg.type === 'private' &&
+          ((msg.fromUser === this.targetId && msg.toUser === this.userId) ||
+              (msg.fromUser === this.userId && msg.toUser === this.targetId))) {
 
-          if (this.targetType === 'group' && !this.groupMessages[this.targetId]) {
-            this.$set(this.groupMessages, this.targetId, []);
-          }
-
-          if (this.targetType === 'group') {
-            sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize);
-          }
-
-          this.initOfflineMessages();
+        const existingIdx = this.messages.findIndex(m => m.msgId === msg.msgId)
+        if (existingIdx !== -1) {
+          this.messages[existingIdx] = { ...this.messages[existingIdx], ...msg }
         } else {
-          this.statusMsg = '登录失败';
+          this.messages.push({ ...msg, isOffline: false, status: msg.status || 'success' })
         }
-        return;
+
+        // 收集未读回执
+        if (msg.fromUser !== this.userId) {
+          this.collectUnreadMsgIds([msg.msgId])
+        }
+
+        this.$nextTick(() => { this.scrollTop = 100000 })
+        return
       }
-      this.processMessage(msg);
-    },
-    initOfflineMessages() {
-      sendReadAck([]); // 初始化未读
-    },
-    processMessage(msg) {
-      if (Array.isArray(msg)) {
-        const offlineMsgs = msg.map(m => ({...m, isOffline: true, status: null}));
-        this.messages.push(...offlineMsgs);
-        const unreadIds = offlineMsgs.filter(m => m.fromUser !== this.userId).map(m => m.msgId).filter(Boolean);
-        if (unreadIds.length > 0) this.collectUnreadMsgIds(unreadIds);
-        this.$nextTick(() => {
-          this.scrollTop = 100000;
-        });
-        return;
-      }
-      if (msg.cmd === 3) { // 群聊
-        const gid = msg.groupId;
-        if (!gid) return;
-        if (!this.groupMessages[gid]) this.$set(this.groupMessages, gid, []);
-        const exists = this.groupMessages[gid].some(m => m.msgId === msg.msgId);
-        if (!exists) this.groupMessages[gid].push({...msg, isOffline: false});
-        if (this.targetType !== 'group' || this.targetId !== gid) {
-          this.$set(this.unreadGroupCount, gid, (this.unreadGroupCount[gid] || 0) + 1);
-        } else {
+
+      // 群聊消息
+      if (msg.type === 'group') {
+        const gid = msg.groupId
+        if (!gid) return
+        if (!this.groupMessages[gid]) this.$set(this.groupMessages, gid, [])
+        const exists = this.groupMessages[gid].some(m => m.msgId === msg.msgId)
+        if (!exists) this.groupMessages[gid].push({ ...msg, isOffline: false })
+
+        if (this.targetType === 'group' && this.targetId === gid) {
           this.$nextTick(() => {
-            const last = this.groupMessages[gid][this.groupMessages[gid].length - 1];
-            this.debounceSendGroupCursor(gid, last?.msgId);
-            this.scrollTop = 100000;
-          });
+            const last = this.groupMessages[gid][this.groupMessages[gid].length - 1]
+            this.debounceSendGroupCursor(gid, last?.msgId)
+            this.scrollTop = 100000
+          })
         }
-        return;
       }
-      const existingIdx = this.messages.findIndex(m => m.msgId === msg.msgId);
-      if (existingIdx !== -1) {
-        this.messages[existingIdx] = {...this.messages[existingIdx], ...msg};
-      } else {
-        this.messages.push({...msg, isOffline: false, status: null});
-      }
-      if (msg.msgId && msg.fromUser !== this.userId && msg.type === 'private' && msg.fromUser === this.targetId) {
-        this.collectUnreadMsgIds([msg.msgId]);
-      }
-      this.$nextTick(() => {
-        this.scrollTop = 100000;
-      });
     },
+
+    /** 发送消息 */
     sendMsg() {
-      if (!this.inputMsg.trim()) return;
+      if (!this.inputMsg.trim()) return
+
       const msg = {
         msgId: 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
         fromUser: this.userId,
+        toUser: this.targetId,
         content: this.inputMsg,
         timestamp: Date.now(),
         type: this.targetType,
         status: 'sending'
-      };
-      const onStatusChange = status => {
-        msg.status = status;
-        this.msgStatusMap[msg.msgId] = status
-      };
-      if (this.targetType === 'private') {
-        msg.toUser = this.targetId;
-        sendMsg(msg, onStatusChange);
-        this.messages.push(msg);
-      } else {
-        msg.groupId = this.targetId;
-        sendGroupMsg(msg, onStatusChange);
-        if (!this.groupMessages[this.targetId]) this.$set(this.groupMessages, this.targetId, []);
-        this.groupMessages[this.targetId].push(msg);
       }
-      this.inputMsg = '';
-      this.$nextTick(() => {
-        this.scrollTop = 100000
-      });
+
+      const onStatusChange = (status) => {
+        msg.status = status
+        this.msgStatusMap[msg.msgId] = status
+      }
+
+      if (this.targetType === 'private') {
+        sendMsg(msg, onStatusChange)
+        this.messages.push(msg) // 本地立即显示
+      } else {
+        msg.groupId = this.targetId
+        sendGroupMsg(msg, onStatusChange)
+        if (!this.groupMessages[this.targetId]) this.$set(this.groupMessages, this.targetId, [])
+        this.groupMessages[this.targetId].push(msg)
+      }
+
+      this.inputMsg = ''
+      this.$nextTick(() => { this.scrollTop = 100000 })
     },
-    handleSelectUser(id) {
-      this.targetId = id;
-      this.targetType = 'private';
-    },
-    handleSelectGroup(gid) {
-      this.targetId = gid;
-      this.targetType = 'group';
-      this.unreadGroupCount[gid] = 0;
-    },
+
+    /** 已读回执 */
     handleReadAck(msgIds) {
       msgIds.forEach(msgId => {
-        const msg = this.messages.find(m => m.msgId === msgId);
+        const msg = this.messages.find(m => m.msgId === msgId)
         if (msg && msg.fromUser === this.userId && msg.status === 'success' && msg.type === 'private') {
-          msg.status = 'isRead';
-          this.msgStatusMap[msgId] = 'isRead';
+          msg.status = 'isRead'
+          this.msgStatusMap[msgId] = 'isRead'
         }
-      });
+      })
     },
+
+    /** 收集未读消息 ID，延迟发送已读回执 */
     collectUnreadMsgIds(ids) {
-      this.unreadMsgIdsBuffer.push(...ids);
-      if (this.unreadMsgIdsTimer) clearTimeout(this.unreadMsgIdsTimer);
+      console.log("收集未读ID:", ids)
+      this.unreadMsgIdsBuffer.push(...ids)
+      if (this.unreadMsgIdsTimer) clearTimeout(this.unreadMsgIdsTimer)
       this.unreadMsgIdsTimer = setTimeout(() => {
-        const uniqueIds = Array.from(new Set(this.unreadMsgIdsBuffer));
-        if (uniqueIds.length > 0) sendReadAck(uniqueIds);
-        this.unreadMsgIdsBuffer = [];
-        this.unreadMsgIdsTimer = null;
-      }, 300);
+        const uniqueIds = Array.from(new Set(this.unreadMsgIdsBuffer))
+        if (uniqueIds.length > 0) sendReadAck(uniqueIds)
+        this.unreadMsgIdsBuffer = []
+        this.unreadMsgIdsTimer = null
+      }, 300)
     },
 
-    // 滚动加载历史消息
+    /** 滚动加载群历史消息 */
     loadMoreMessages() {
-      if (this.targetType !== 'group' || !this.groupHasMore) return;
-      const groupId = this.targetId;
-      const pageNum = this.groupPageNum + 1;
-      sendGroupHistoryRequest(groupId, pageNum, this.groupPageSize);
-      this.groupPageNum = pageNum;
+      if (this.targetType !== 'group' || !this.groupHasMore) return
+      const groupId = this.targetId
+      const pageNum = this.groupPageNum + 1
+      sendGroupHistoryRequest(groupId, pageNum, this.groupPageSize)
+      this.groupPageNum = pageNum
     },
 
-
+    /** 工具方法 */
     disconnect() { closeSocket() },
     formatTimestamp(ts) {
-      const d = new Date(ts)
-      return d.toLocaleTimeString()
+      if (!ts) return ''
+      let dateObj
+
+      if (typeof ts === 'string') {
+        // 处理 iOS 不兼容 "yyyy-MM-dd HH:mm:ss"
+        if (ts.includes('-') && ts.includes(':') && ts.includes(' ')) {
+          ts = ts.replace(/-/g, '/')
+        }
+        dateObj = new Date(ts)
+      } else {
+        dateObj = new Date(ts)
+      }
+
+      if (isNaN(dateObj.getTime())) return '' // 避免 Invalid Date
+
+      const h = String(dateObj.getHours()).padStart(2, '0')
+      const m = String(dateObj.getMinutes()).padStart(2, '0')
+      const s = String(dateObj.getSeconds()).padStart(2, '0')
+      return `${h}:${m}:${s}`
     },
+
     retrySend(msg) {
       msg.status = 'sending'
-      if (msg.type === 'private') {
-        sendMsg(msg)
-      } else {
-        sendGroupMsg(msg)
-      }
+      if (msg.type === 'private') sendMsg(msg)
+      else sendGroupMsg(msg)
     },
-    // 合并群聊历史
+
+    /** 合并群聊历史 */
     mergeGroupHistory(arr) {
-      if (!Array.isArray(arr) || arr.length === 0) {
-        this.groupHasMore = false;
-        return;
-      }
       arr.forEach(m => {
-        if (!this.groupMessages[m.groupId]) this.$set(this.groupMessages, m.groupId, []);
-        this.groupMessages[m.groupId].unshift(m); // 插入到顶部
-      });
+        if (!this.groupMessages[m.groupId]) this.$set(this.groupMessages, m.groupId, [])
+        this.groupMessages[m.groupId].unshift(m)
+      })
     },
-    // 防抖上报群游标
+
+    /** 防抖上报群游标 */
     debounceSendGroupCursor: (function () {
       let timer = null
       return function (gid, msgId) {
@@ -315,6 +312,19 @@ export default {
         }, 500)
       }
     })()
+  },
+
+  computed: {
+    currentMessages() {
+      if (this.targetType === 'private') {
+        return this.messages.filter(m =>
+            (m.fromUser === this.targetId && m.toUser === this.userId) ||
+            (m.fromUser === this.userId && m.toUser === this.targetId)
+        )
+      } else {
+        return this.groupMessages[this.targetId] || []
+      }
+    }
   }
 }
 </script>

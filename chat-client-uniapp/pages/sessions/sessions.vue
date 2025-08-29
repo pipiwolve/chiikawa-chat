@@ -8,7 +8,7 @@
         @click="connect(item)"
     >
       <view class="avatar">
-        <text class="round" v-if="item.unread > 0"></text>
+        <text class="round" v-if="item.hasUnread > 0"></text>
         <image :src="item.avatar || defaultAvatar" mode="widthFix"></image>
       </view>
       <view class="content">
@@ -23,7 +23,7 @@
 </template>
 
 <script>
-import { fetchSessions, registerCmdHandler } from '@/utils/socket.js'
+import { fetchSessions, registerCmdHandler, unregisterCmdHandler } from '@/utils/socket.js'
 
 export default {
   data() {
@@ -35,6 +35,7 @@ export default {
   },
   onLoad() {
     this.userId = uni.getStorageSync('currentUserId') || ''
+    console.log('消息中心取到用户ID', this.userId)
     this.loadSessions()
 
     registerCmdHandler(205, (data) => {
@@ -43,24 +44,52 @@ export default {
       // 可在 sessions 页面显示红点
       uni.showToast({ title: `${data.fromUser} 申请加你为好友`, icon: "none" })
     })
+
+    // 好友添加成功回调
+    registerCmdHandler(207, (data) => {
+      uni.showToast({ title: `你和 ${data.friendId} 已成为好友`, icon: 'success' })
+      uni.$emit('refreshFriends')
+      this.loadSessions()
+    })
+
+    // 群聊相关回调
+    registerCmdHandler(201, () => this.loadSessions()) // 加群成功
+    registerCmdHandler(203, () => this.loadSessions()) // 创建群成功
+    registerCmdHandler(204, () => this.loadSessions()) // 被拉入群
+
+    // 全局刷新事件订阅
+    uni.$on('refreshFriends', this.loadSessions)
+    uni.$on('refreshGroups', this.loadSessions)
+  },
+
+  onUnload() {
+    // 避免重复绑定
+    uni.$off('refreshFriends', this.loadSessions)
+    uni.$off('refreshGroups', this.loadSessions)
+
+    // 注销 WebSocket 回调
+    unregisterCmdHandler(205)
+    unregisterCmdHandler(207)
+    unregisterCmdHandler(201)
+    unregisterCmdHandler(203)
+    unregisterCmdHandler(204)
   },
 
   methods: {
     // 获取最近会话（cmd=200）
     loadSessions() {
       fetchSessions((resp) => {
-        console.log('最近会话:', resp.sessions)
-        this.users = resp.sessions || []
+        console.log('[Sessions] 最近会话:', resp.sessions)
+        this.users = (resp.sessions || []).map(s => ({
+          ...s,
+          // 标记未读：未读消息或存在待处理好友请求
+          hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
+        }))
       })
     },
     // 点击会话进入聊天
     connect(item) {
-      let query = ''
-      if (item.userId) {
-        query = `?targetId=${item.userId}&type=private`
-      } else if (item.groupId) {
-        query = `?targetId=${item.groupId}&type=group`
-      }
+      let query = `?targetId=${item.sessionId}&type=${item.type}`
       uni.navigateTo({
         url: '/pages/chat/chat' + query
       })

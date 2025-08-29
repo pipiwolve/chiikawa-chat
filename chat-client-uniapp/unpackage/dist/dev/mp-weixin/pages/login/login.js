@@ -22,6 +22,7 @@ const _sfc_main = {
           if (msg.cmd === 11 && msg.result === "ok") {
             this.status = "登录成功，跳转中...";
             common_vendor.index.setStorageSync("currentUserId", this.userId);
+            common_vendor.index.__f__("log", "at pages/login/login.vue:45", "当前绑定id", this.userId);
             common_vendor.index.switchTab({
               url: "/pages/sessions/sessions"
             });
@@ -33,10 +34,10 @@ const _sfc_main = {
       }
       utils_socket.sendLogin(this.userId, this.password);
       utils_socket.setReadAckHandler((msgIds) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:62", "[已读回执]", msgIds);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:64", "[已读回执]", msgIds);
       });
       utils_socket.setGroupHistoryHandler((history) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:65", "[群历史]", history);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:67", "[群历史]", history);
       });
       this.status = "登录请求已发送...";
     },

@@ -23,7 +23,7 @@
     </view>
 
 
-    <view v-for="(item, index) in friends" :key="index" class="list-item">
+    <view v-for="(item, index) in friends" :key="index" class="list-item" @click="connect(item)">
       <image class="avatar" :src="item.avatar || defaultAvatar"></image>
       <text class="nickname">{{ item.username }}</text>
     </view>
@@ -84,6 +84,16 @@ export default {
           }
         }
       })
+    },
+    // 点击会话进入聊天
+    connect(item) {
+      let query = ''
+      if (item.userId) {
+        query = `?targetId=${item.userId}&type=private`
+        uni.navigateTo({
+          url: '/pages/chat/chat' + query
+        })
+      }
     },
 
     gotoFriendRequests() {

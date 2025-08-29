@@ -102,6 +102,7 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
                 case 3:
                     // 群聊消息转发
+                    System.out.println("收到消息JSON: " + chatMessage);
                     ChatService.sendGroupMsg(chatMessage, channelContext);
                     break;
 
@@ -131,6 +132,7 @@ public class ChatWsHandler implements IWsMsgHandler {
                     if (user != null) {
                         result.put("cmd", 11);
                         result.put("result", "ok");
+                        result.put("userId", userId);
                         result.put("nickname", user.getUserName());
 
                         handleUserLoginSuccess(user, userId, channelContext);
@@ -147,11 +149,27 @@ public class ChatWsHandler implements IWsMsgHandler {
                     ChatService.processReadAck(chatMessage.getMsgIds(), chatMessage.getFromUser(), channelContext);
                     break;
 
+
+                case 211: {
+                    String userId = chatMessage.getFromUser();   // 当前登录用户
+                    String targetId = chatMessage.getToUser(); // 对方
+                    List<ChatMessage> offlineMsgs = ChatService.getOfflineMessages(userId, targetId);
+                    if (offlineMsgs != null && !offlineMsgs.isEmpty()) {
+                        for (ChatMessage offlineMsg : offlineMsgs) {
+                            Tio.send(channelContext,
+                                    WsResponse.fromText(JsonUtil.toJson(offlineMsg), ChatServerConfig.CHARSET));
+                        }
+                        ChatService.markOfflineMessagesDelivered(userId, targetId);
+                    }
+                }
+
                 case 102: // 群聊已读游标更新
                     ChatGroupService.updateGroupReadCursor(chatMessage.getFromUser(), chatMessage.getGroupId(), chatMessage.getMsgId());
                     // 这里可以扩展：通知群组其他成员该用户已读到哪里
                     ChatGroupService.broadcastGroupCursor(chatMessage, channelContext);
                     break;
+
+
 
                 // 历史信息加载
                 case 103: {
@@ -378,29 +396,13 @@ public class ChatWsHandler implements IWsMsgHandler {
         // 3. 系统消息：广播上线
         int count = Tio.getAll(channelContext.tioConfig).getObj().size();
         ChatMessage sysMsg = new ChatMessage();
-        sysMsg.setFromUser("系统");
+        sysMsg.setFromUser("admin");
         sysMsg.setContent(user.getUserName() + " 上线了，共【" + count + "】人在线");
         Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID,
                 WsResponse.fromText(JsonUtil.toJson(sysMsg), ChatServerConfig.CHARSET));
 
-        // 4. 推送离线消息
-        List<ChatMessage> offlineMessages = ChatService.getOfflineMessages(userId);
-        if (offlineMessages != null && !offlineMessages.isEmpty()) {
-            for (ChatMessage offlineMsg : offlineMessages) {
-                Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(offlineMsg), ChatServerConfig.CHARSET));
-            }
-            ChatService.markOfflineMessagesDelivered(userId);
-        }
-
-        // 5. 推送离线已读回执
-        List<ChatMessage> receipts = ChatService.getOfflineReadReceipts(userId);
-        if (receipts != null && !receipts.isEmpty()) {
-            for (ChatMessage receipt : receipts) {
-                Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(receipt), ChatServerConfig.CHARSET));
-            }
-            ChatService.clearOfflineReadReceipts(userId);
-        }
     }
+
 
 
     /**

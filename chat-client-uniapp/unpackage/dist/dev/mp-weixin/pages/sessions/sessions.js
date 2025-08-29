@@ -11,28 +11,47 @@ const _sfc_main = {
   },
   onLoad() {
     this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
+    common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:38", "消息中心取到用户ID", this.userId);
     this.loadSessions();
     utils_socket.registerCmdHandler(205, (data) => {
       common_vendor.index.$emit("refreshFriendRequests");
       common_vendor.index.showToast({ title: `${data.fromUser} 申请加你为好友`, icon: "none" });
     });
+    utils_socket.registerCmdHandler(207, (data) => {
+      common_vendor.index.showToast({ title: `你和 ${data.friendId} 已成为好友`, icon: "success" });
+      common_vendor.index.$emit("refreshFriends");
+      this.loadSessions();
+    });
+    utils_socket.registerCmdHandler(201, () => this.loadSessions());
+    utils_socket.registerCmdHandler(203, () => this.loadSessions());
+    utils_socket.registerCmdHandler(204, () => this.loadSessions());
+    common_vendor.index.$on("refreshFriends", this.loadSessions);
+    common_vendor.index.$on("refreshGroups", this.loadSessions);
+  },
+  onUnload() {
+    common_vendor.index.$off("refreshFriends", this.loadSessions);
+    common_vendor.index.$off("refreshGroups", this.loadSessions);
+    utils_socket.unregisterCmdHandler(205);
+    utils_socket.unregisterCmdHandler(207);
+    utils_socket.unregisterCmdHandler(201);
+    utils_socket.unregisterCmdHandler(203);
+    utils_socket.unregisterCmdHandler(204);
   },
   methods: {
     // 获取最近会话（cmd=200）
     loadSessions() {
       utils_socket.fetchSessions((resp) => {
-        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:52", "最近会话:", resp.sessions);
-        this.users = resp.sessions || [];
+        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:82", "[Sessions] 最近会话:", resp.sessions);
+        this.users = (resp.sessions || []).map((s) => ({
+          ...s,
+          // 标记未读：未读消息或存在待处理好友请求
+          hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
+        }));
       });
     },
     // 点击会话进入聊天
     connect(item) {
-      let query = "";
-      if (item.userId) {
-        query = `?targetId=${item.userId}&type=private`;
-      } else if (item.groupId) {
-        query = `?targetId=${item.groupId}&type=group`;
-      }
+      let query = `?targetId=${item.sessionId}&type=${item.type}`;
       common_vendor.index.navigateTo({
         url: "/pages/chat/chat" + query
       });
@@ -50,8 +69,8 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return {
     a: common_vendor.f($data.users, (item, index, i0) => {
       return common_vendor.e({
-        a: item.unread > 0
-      }, item.unread > 0 ? {} : {}, {
+        a: item.hasUnread > 0
+      }, item.hasUnread > 0 ? {} : {}, {
         b: item.avatar || $data.defaultAvatar,
         c: common_vendor.t(item.nickname || item.name),
         d: common_vendor.t($options.formatTime(item.lastTime)),

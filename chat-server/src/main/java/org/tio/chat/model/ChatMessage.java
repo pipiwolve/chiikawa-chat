@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.tio.core.ChannelContext;
 import java.io.Serializable;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 @Data
@@ -33,7 +34,7 @@ public class ChatMessage implements Serializable {
     @JsonAlias({ "text", "message", "msg", "sysMsg" })
     private String content;
 
-    private Long timestamp;
+    private Date createTime;
     private String msgId;
     private Boolean isRead;
     private List<String> msgIds;

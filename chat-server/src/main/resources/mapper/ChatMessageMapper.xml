@@ -13,30 +13,13 @@
             (#{msgId}, #{fromUser}, #{toUser}, #{groupId}, #{content}, #{cmd}, #{isRead}, #{isOffline}, NOW())
     </insert>
 
-    <!-- 查询用户离线消息 -->
-    <select id="selectOfflineByToUser" resultType="org.tio.chat.model.ChatMessage">
-        SELECT id,
-               msg_id AS msgId,
-               from_user AS fromUser,
-               to_user AS toUser,
-               group_id AS groupId,
-               content,
-               cmd,
-               is_read AS isRead,
-               is_offline AS isOffline,
-               create_time AS createTime
-        FROM chat_message
-        WHERE to_user = #{toUser}
-          AND is_offline = TRUE
-        ORDER BY create_time ASC
-    </select>
-
-    <!-- 将用户的离线消息标记为已投递 -->
+    <!-- 标记某用户某对话的离线消息已投递 -->
     <update id="markDeliveredByToUser">
         UPDATE chat_message
-        SET is_offline = FALSE
-        WHERE to_user = #{toUser}
-          AND is_offline = TRUE
+        SET is_offline = 0
+        WHERE to_user = #{userId}
+          AND from_user = #{peerId}
+          AND is_offline = 1
     </update>
 
     <!-- 批量标记消息为已读 -->
@@ -62,35 +45,62 @@
         AND cmd = 2
     </select>
 
-        <!-- 查询用户私聊最近消息 -->
-        <select id="selectRecentPrivateMessages" resultType="org.tio.chat.model.ChatMessage">
-            SELECT *
-            FROM chat_message
-            WHERE (from_user = #{userId} OR to_user = #{userId})
-              AND cmd = 2
-            ORDER BY create_time DESC
-        </select>
+    <!-- 获取和某用户有过私聊的用户对象 -->
+    <select id="getPrivateChatUsers" resultType="org.tio.chat.model.ChatUser">
+        SELECT DISTINCT
+            CASE
+                WHEN from_user = #{userId} THEN to_user
+                ELSE from_user
+                END AS userId
+        FROM chat_message
+        WHERE (from_user = #{userId} OR to_user = #{userId})
+          AND cmd = 2
+    </select>
+
+    <!-- 查询某个私聊对象的最后一条消息 -->
+    <select id="selectLastPrivateMessage" resultType="org.tio.chat.model.ChatMessage">
+        SELECT from_user AS fromUser,
+               to_user   AS toUser,
+               content,
+               create_time AS createTime
+        FROM chat_message
+        WHERE ((from_user = #{userId} AND to_user = #{peerId})
+            OR (from_user = #{peerId} AND to_user = #{userId}))
+          AND cmd = 2
+        ORDER BY create_time DESC
+        LIMIT 1
+    </select>
 
     <!-- 查询群聊最后一条消息 -->
     <select id="selectLastGroupMessage" resultType="org.tio.chat.model.ChatMessage">
-        SELECT *
+        SELECT  from_user AS fromUser,
+                to_user   AS toUser,
+                content,
+                create_time AS createTime
         FROM chat_message
         WHERE group_id = #{groupId} AND cmd = 3
         ORDER BY create_time DESC
         LIMIT 1
     </select>
 
+    <!-- 统计未读私聊消息数 -->
+    <select id="countUnreadPrivateMessages" resultType="int">
+        SELECT COUNT(*)
+        FROM chat_message
+        WHERE to_user = #{userId}
+          AND from_user = #{peerId}
+          AND is_read = 0
+          AND cmd = 2
+    </select>
 
-        <!-- 统计用户与某私聊对象未读消息数 -->
-        <select id="countUnreadPrivateMessages" resultType="int">
-            SELECT COUNT(*)
-            FROM chat_message
-            WHERE cmd = 2
-              AND from_user = #{otherUserId}
-              AND to_user = #{userId}
-              AND is_read = FALSE
-        </select>
-
-
+    <!-- 查询离线私聊消息 -->
+    <select id="selectOfflinePrivate" resultType="org.tio.chat.model.ChatMessage">
+        SELECT msg_id AS msgId, from_user AS fromUser, to_user AS toUser, content, create_time AS createTime
+        FROM chat_message
+        WHERE to_user = #{userId}
+          AND from_user = #{peerId}
+          AND is_offline = true
+        ORDER BY create_time ASC
+    </select>
 
 </mapper>

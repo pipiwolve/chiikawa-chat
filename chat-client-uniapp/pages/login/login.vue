@@ -42,6 +42,7 @@ export default {
             this.status = '登录成功，跳转中...'
 
             uni.setStorageSync('currentUserId', this.userId)
+            console.log('当前绑定id', this.userId)
 
             // 跳转到消息中心 (tabbar 页面)
             uni.switchTab({
@@ -49,6 +50,7 @@ export default {
             })
           } else if (msg.cmd === 11 && msg.result === 'fail') {
             this.status = '登录失败，用户名或密码错误'
+
           }
         })
         this.socketConnected = true

@@ -1,7 +1,4 @@
 {
   "navigationBarTitleText": "聊天",
-  "usingComponents": {
-    "contact-list": "../../components/ContactList",
-    "group-list": "../../components/GroupList"
-  }
+  "usingComponents": {}
 }

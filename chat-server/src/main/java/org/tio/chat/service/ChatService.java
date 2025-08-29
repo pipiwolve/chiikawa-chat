@@ -57,25 +57,30 @@ public class ChatService {
     private static final StatefulRedisConnection<String, String> CONN = REDIS.connect();
     static final RedisCommands<String, String> R = CONN.sync();
 
-    private static String offlineKey(String userId) { return "offline:" + userId; }
-    private static String readAckKey(String userId) { return "readAck:" + userId; }
-    // "chat:group:msgs:" + groupId → 每个群对应一条 Redis Key
-    static String groupMsgKey(String groupId){ return "chat:group:msgs:" + groupId; } // List (JSON)
-    static String groupCursorKey(String groupId, String userId){ return "chat:group:cursor:" + groupId + ":" + userId; } // String (msgId)
-    static final int GROUP_RECENT_MAX = 200; // 每群 Redis 保留最近消息条数
+    /** 私聊离线消息 Redis Key: offline:{userId}:{peerId} */
+    private static String offlineKey(String userId, String peerId) {
+        return "offline:" + userId + ":" + peerId;
+    }
 
+    /** 私聊离线已读回执 Redis Key: readAck:{userId}:{peerId} */
+    private static String readAckKey(String userId, String peerId) {
+        return "readAck:" + userId + ":" + peerId;
+    }
 
-    // -------------------- 在线消息内存索引 + TTL --------------------
-    private static final long ONLINE_INDEX_TTL_MS = 10 * 60 * 1000L; // 10分钟
+    // 群聊 Redis Key
+    static String groupMsgKey(String groupId){ return "chat:group:msgs:" + groupId; }
+    static String groupCursorKey(String groupId, String userId){ return "chat:group:cursor:" + groupId + ":" + userId; }
+    static final int GROUP_RECENT_MAX = 200;
+
+    // 在线消息内存索引 + TTL
+    private static final long ONLINE_INDEX_TTL_MS = 10 * 60 * 1000L;
     private static final ConcurrentHashMap<String, OnlineEntry> onlineMsgMap = new ConcurrentHashMap<>();
-
     private static class OnlineEntry {
         final ChatMessage msg;
-        final long ts; // 放入时间
+        final long ts;
         OnlineEntry(ChatMessage msg) { this.msg = msg; this.ts = System.currentTimeMillis(); }
         boolean expired() { return System.currentTimeMillis() - ts > ONLINE_INDEX_TTL_MS; }
     }
-
     private static void pruneOnlineIndex() {
         for (Map.Entry<String, OnlineEntry> e : onlineMsgMap.entrySet()) {
             if (e.getValue() == null || e.getValue().expired()) {
@@ -84,201 +89,135 @@ public class ChatService {
         }
     }
 
-
-    // -------------------- 绑定/分发 --------------------
-
-    /** 绑定用户并加入默认群组（如 "group1"） */
+    // -------------------- 绑定 --------------------
     public static void bindUser(String userId, ChannelContext ctx) {
         if (userId == null) return;
         Tio.bindUser(ctx, userId);
         Tio.bindGroup(ctx, ChatConst.GROUP_ID);
     }
 
-
-    /**
-     * 私聊：写库 -> 在线判断 -> 发送或缓存离线 -> 维护在线索引
-     */
+    // -------------------- 私聊 --------------------
     public static void sendPrivateMsg(ChatMessage chatMessage, ChannelContext ctx) {
         if (chatMessage == null || chatMessage.getToUser() == null) return;
 
-        // 1) 写库：cmd=2, to_user=..., group_id=null, is_offline 在线判断后回填
         chatMessage.setCmd(2);
         chatMessage.setGroupId(null);
-
-        // ? 在线判断 ？
         boolean receiverOnline = isUserOnline(ctx.tioConfig, chatMessage.getToUser());
         chatMessage.setOffline(!receiverOnline);
 
         insertMessage(chatMessage);
 
-        // 2) 在线 -> 推送；离线 -> Redis 缓存
         if (receiverOnline) {
             WsResponse resp = WsResponse.fromText(JsonUtil.toJson(chatMessage), ChatServerConfig.CHARSET);
             Tio.sendToUser(ctx.tioConfig, chatMessage.getToUser(), resp);
         }
 
-        // 3) 维护在线索引（用于后续已读快速匹配）
         if (chatMessage.getMsgId() != null) {
             onlineMsgMap.put(chatMessage.getMsgId(), new OnlineEntry(chatMessage));
             pruneOnlineIndex();
         }
     }
 
-    /**
-     * 群聊：写库 -> 群发（不做已读逻辑）
-     */
+    // -------------------- 群聊 --------------------
     public static void sendGroupMsg(ChatMessage chatMessage, ChannelContext ctx) {
         if (chatMessage == null || chatMessage.getGroupId() == null) return;
 
-        String gid = chatMessage.getGroupId();
-        if (gid == null || gid.isEmpty()) {
-            gid = chatMessage.getToUser();
-            chatMessage.setGroupId(gid);
-        }
         chatMessage.setCmd(3);
-        chatMessage.setOffline(false); // 群聊不计离线（历史另行查询）
-
+        chatMessage.setOffline(false);
         insertMessage(chatMessage);
 
-
-        // 写redis缓存最近50条信息
         String json = JsonUtil.toJson(chatMessage);
-        R.lpush(groupMsgKey(gid), json);
-        R.ltrim(groupMsgKey(gid), 0, GROUP_RECENT_MAX - 1); // 只保留最近 50 条
+        R.lpush(groupMsgKey(chatMessage.getGroupId()), json);
+        R.ltrim(groupMsgKey(chatMessage.getGroupId()), 0, GROUP_RECENT_MAX - 1);
 
-        WsResponse resp = WsResponse.fromText(JsonUtil.toJson(chatMessage), ChatServerConfig.CHARSET);
+        WsResponse resp = WsResponse.fromText(json, ChatServerConfig.CHARSET);
         Tio.sendToGroup(ctx.tioConfig, chatMessage.getGroupId(), resp);
     }
 
-
-    // -------------------- 离线消息（消息体） --------------------
-
-    /** 入库 + 可选写缓存（Redis） */
+    // -------------------- 消息入库 + 缓存 --------------------
     private static void insertMessage(ChatMessage msg) {
         try (SqlSession s = SQL_SESSION_FACTORY.openSession(true)) {
-            org.tio.chat.mapper.ChatMessageMapper m = s.getMapper(org.tio.chat.mapper.ChatMessageMapper.class);
+            ChatMessageMapper m = s.getMapper(ChatMessageMapper.class);
             m.insert(msg);
         }
-        // 如果是离线消息，写入 Redis 缓存以便上线时快速推送
-            if (Boolean.TRUE.equals(msg.isOffline())) {
+        if (Boolean.TRUE.equals(msg.isOffline())) {
             cacheOfflineMessage(msg);
         }
     }
 
-    /** 仅写离线缓存（被 sendPrivateMsg/insertMessage 调用） */
     private static void cacheOfflineMessage(ChatMessage msg) {
-        if (msg == null || msg.getToUser() == null) return;
-        R.rpush(offlineKey(msg.getToUser()), JsonUtil.toJson(msg));
-        R.expire(offlineKey(msg.getToUser()), 86400); // 1天有效期
+        if (msg == null || msg.getToUser() == null || msg.getFromUser() == null) return;
+        R.rpush(offlineKey(msg.getToUser(), msg.getFromUser()), JsonUtil.toJson(msg));
+        R.expire(offlineKey(msg.getToUser(), msg.getFromUser()), 86400);
     }
 
-    /**
-     * 拉取离线消息：
-     * - 先查 Redis (带 TTL，1天)
-     * - 如果 Redis 没有或过期，则查 DB (is_offline=true)
-     * - 拉取后立即清理 Redis，避免重复推送
-     */
-    public static List<ChatMessage> getOfflineMessages(String userId) {
-        if (userId == null) return Collections.emptyList();
+    // -------------------- 拉取离线消息 --------------------
+    public static List<ChatMessage> getOfflineMessages(String userId, String peerId) {
+        if (userId == null || peerId == null) return Collections.emptyList();
 
         List<ChatMessage> result = new ArrayList<>();
+        String key = offlineKey(userId, peerId);
 
-        // ---------------- 1) 优先查 Redis ----------------
-        List<String> cached = R.lrange(offlineKey(userId), 0, -1);
+        List<String> cached = R.lrange(key, 0, -1);
         if (cached != null && !cached.isEmpty()) {
             for (String s : cached) {
                 ChatMessage msg = JsonUtil.fromJson(s, ChatMessage.class);
-                if (msg != null) {
-                    result.add(msg);
-                }
+                if (msg != null) result.add(msg);
             }
-            // 一旦取出，清理 Redis 缓存，防止重复推送
-            R.del(offlineKey(userId));
+            R.del(key);
             return result;
         }
 
-        // ---------------- 2) fallback 查 DB ----------------
         try (SqlSession s = SQL_SESSION_FACTORY.openSession()) {
-            org.tio.chat.mapper.ChatMessageMapper m = s.getMapper(org.tio.chat.mapper.ChatMessageMapper.class);
-            result = m.selectOfflineByToUser(userId);
+            ChatMessageMapper m = s.getMapper(ChatMessageMapper.class);
+            result = m.selectOfflinePrivate(userId, peerId);
         }
 
-        // ---------------- 3) DB 查询到的消息再次写入 Redis 缓存 ----------------
         if (!result.isEmpty()) {
             for (ChatMessage msg : result) {
-                R.rpush(offlineKey(userId), JsonUtil.toJson(msg));
+                R.rpush(key, JsonUtil.toJson(msg));
             }
-            R.expire(offlineKey(userId), 86400); // 1天 TTL
+            R.expire(key, 86400);
         }
-
         return result;
     }
 
-    /** 标记某用户的离线消息“已投递/已合并”，DB: is_offline=false；Redis: 清空列表 */
-    public static void markOfflineMessagesDelivered(String userId) {
-        if (userId == null) return;
+    // -------------------- 标记已投递 --------------------
+    public static void markOfflineMessagesDelivered(String userId, String peerId) {
+        if (userId == null || peerId == null) return;
         try (SqlSession s = SQL_SESSION_FACTORY.openSession(true)) {
-            org.tio.chat.mapper.ChatMessageMapper m = s.getMapper(org.tio.chat.mapper.ChatMessageMapper.class);
-            m.markDeliveredByToUser(userId);
+            ChatMessageMapper m = s.getMapper(ChatMessageMapper.class);
+            m.markDeliveredByToUser(userId, peerId);
         }
-        R.del(offlineKey(userId));
+        R.del(offlineKey(userId, peerId));
     }
 
-    // -------------------- 离线已读回执（Redis） --------------------
-
+    // -------------------- 私聊离线已读回执 --------------------
     public static void saveOfflineReadReceipt(String senderId, ChatMessage readAck) {
         if (senderId == null || readAck == null) return;
-        R.rpush(readAckKey(senderId), JsonUtil.toJson(readAck));
+        R.rpush(readAckKey(senderId, readAck.getFromUser()), JsonUtil.toJson(readAck));
     }
 
-    public static List<ChatMessage> getOfflineReadReceipts(String userId) {
-        if (userId == null) return Collections.emptyList();
-        List<String> list = R.lrange(readAckKey(userId), 0, -1);
+    public static List<ChatMessage> getOfflineReadReceipts(String userId, String peerId) {
+        if (userId == null || peerId == null) return Collections.emptyList();
+        List<String> list = R.lrange(readAckKey(userId, peerId), 0, -1);
         List<ChatMessage> rs = new ArrayList<>();
         for (String s : list) rs.add(JsonUtil.fromJson(s, ChatMessage.class));
         return rs;
     }
 
-    public static void clearOfflineReadReceipts(String userId) {
-        if (userId == null) return;
-        R.del(readAckKey(userId));
+    public static void clearOfflineReadReceipts(String userId, String peerId) {
+        if (userId == null || peerId == null) return;
+        R.del(readAckKey(userId, peerId));
     }
 
-    // -------------------- 已读确认(100) -> 已读回执(101) --------------------
-
-    /**
-     * @param msgIds   接收方声明已读的消息ID集合
-     * @param readerId 已读的接收方（当前登录用户）
-     * @param ctx      当前连接（取 tioConfig 用）
-     */
+    // -------------------- 处理已读确认 -> 生成回执 --------------------
     public static void processReadAck(List<String> msgIds, String readerId, ChannelContext ctx) {
         if (readerId == null || msgIds == null || msgIds.isEmpty()) return;
 
-        // ------------------ 0) DB 永久存储，强制批量标记已读 ------------------
-        try (SqlSession s = SQL_SESSION_FACTORY.openSession(true)) {
-            org.tio.chat.mapper.ChatMessageMapper m = s.getMapper(org.tio.chat.mapper.ChatMessageMapper.class);
-            m.markReadByMsgIds(msgIds, readerId);
-        }
-
-        // ------------------ 1) Redis 离线缓存匹配（TTL 24h） ------------------
         ConcurrentHashMap<String, List<String>> ackBySender = new ConcurrentHashMap<>();
-
-        List<String> cached = R.lrange(offlineKey(readerId), 0, -1);
-        if (cached != null && !cached.isEmpty()) {
-            for (String s : cached) {
-                ChatMessage m = JsonUtil.fromJson(s, ChatMessage.class);
-                if (m != null && msgIds.contains(m.getMsgId())) {
-                    m.setIsRead(true);
-                    if (m.getFromUser() != null) {
-                        ackBySender.computeIfAbsent(m.getFromUser(), k -> new ArrayList<>()).add(m.getMsgId());
-                    }
-                }
-            }
-            // 不强制回写 Redis，因为 Redis 只是临时缓存，DB 已经是已读状态
-        }
-
-        // ------------------ 2) 在线内存索引匹配（10min TTL） ------------------
         pruneOnlineIndex();
+
         for (String mid : msgIds) {
             OnlineEntry oe = onlineMsgMap.get(mid);
             if (oe != null && oe.msg != null) {
@@ -290,9 +229,7 @@ public class ChatService {
             }
         }
 
-        // ------------------ 3) 批量生成已读回执 101 ------------------
         final TioConfig tioCfg = (ctx != null ? ctx.tioConfig : TIO);
-
         for (Map.Entry<String, List<String>> e : ackBySender.entrySet()) {
             String senderId = e.getKey();
             List<String> ids = e.getValue();
@@ -305,7 +242,6 @@ public class ChatService {
             readAck.setMsgIds(ids);
 
             WsResponse resp = WsResponse.fromText(JsonUtil.toJson(readAck), ChatServerConfig.CHARSET);
-
             if (isUserOnline(tioCfg, senderId)) {
                 Tio.sendToUser(tioCfg, senderId, resp);
             } else {
@@ -313,8 +249,6 @@ public class ChatService {
             }
         }
     }
-
-
     // -------------------- 辅助：在线判断 --------------------
 
     /** 封装统一的在线判断，兼容旧 API */

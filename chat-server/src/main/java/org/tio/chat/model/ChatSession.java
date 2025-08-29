@@ -15,6 +15,7 @@ public class ChatSession {
     private String type;      // private / group
     private String nickname;  // 显示昵称
     private String lastMsg;
+    private String avatar;
     private Date lastTime;
     private int unread;
 

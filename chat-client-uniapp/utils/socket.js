@@ -103,14 +103,6 @@ function attemptReconnect(onMessage) {
     }, delay);
 }
 
-function sendRaw(data) {
-    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
-        try { socketTask.send({ data: JSON.stringify(data) }); }
-        catch (e) { console.error('[socket] 发送消息异常', e, data); }
-    } else {
-        console.warn('[socket] WebSocket未连接，无法发送消息:', data);
-    }
-}
 
 function flushQueue() {
     if (!messageQueue.length) { persistQueue(); return; }
@@ -255,27 +247,57 @@ export function fetchGroups(onResult) {
 
 
 
-// 保留私聊/群聊消息发送接口
+// 发送私聊消息
 export function sendMsg(msg, onStatusChange) {
-    const data = { cmd: 2, type: 'private', ...msg};
-    sendData(data, onStatusChange);
+    const data = { cmd: 2, type: 'private', ...msg };
+    try {
+        sendData(data); // 发送到底层 WebSocket
+        onStatusChange && onStatusChange('success'); // 成功回调
+    } catch (e) {
+        console.error('发送私聊失败', e);
+        onStatusChange && onStatusChange('failed'); // 失败回调
+    }
 }
 
+// 发送群聊消息
 export function sendGroupMsg(msg, onStatusChange) {
-    const data = { cmd: 3, type: 'group', ...msg};
-    sendData(data, onStatusChange);
+    const data = { cmd: 3, type: 'group', ...msg };
+    try {
+        sendData(data);
+        onStatusChange && onStatusChange('success');
+    } catch (e) {
+        console.error('发送群聊失败', e);
+        onStatusChange && onStatusChange('failed');
+    }
+}
+
+export function onPrivateMessage(callback) {
+    registerCmdHandler(2, callback);
+}
+
+export function onGroupMessage(callback) {
+    registerCmdHandler(3, callback);
 }
 
 export function sendReadAck(msgIds) {
     if (!Array.isArray(msgIds) || msgIds.length === 0) return;
     const ackData = { cmd: 100, fromUser: currentUserId, msgIds };
     if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
-        try { socketTask.send({ data: JSON.stringify(ackData) }); }
+        try { socketTask.send({ data: JSON.stringify(ackData) });
+            console.log("发送已读回执:", ackData)}
         catch (e) { messageQueue.push(ackData); persistQueue(); }
     } else {
         messageQueue.push(ackData);
         persistQueue();
     }
+}
+
+export function fetchOfflinePrivateMessages(toUser, onResult) {
+    if (!toUser) return;
+    const payload = { toUser };
+    const cmd = 211;
+    registerCmdHandler(cmd, onResult);
+    sendCmdMessage(cmd, payload);
 }
 
 export function sendGroupCursor(groupId, lastMsgId) {

@@ -46,6 +46,16 @@ const _sfc_main = {
         }
       });
     },
+    // 点击会话进入聊天
+    connect(item) {
+      let query = "";
+      if (item.userId) {
+        query = `?targetId=${item.userId}&type=private`;
+        common_vendor.index.navigateTo({
+          url: "/pages/chat/chat" + query
+        });
+      }
+    },
     gotoFriendRequests() {
       common_vendor.index.navigateTo({ url: "/pages/friends-request/friends-request" });
     },
@@ -66,7 +76,8 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
       return {
         a: item.avatar || $data.defaultAvatar,
         b: common_vendor.t(item.username),
-        c: index
+        c: index,
+        d: common_vendor.o(($event) => $options.connect(item), index)
       };
     })
   };

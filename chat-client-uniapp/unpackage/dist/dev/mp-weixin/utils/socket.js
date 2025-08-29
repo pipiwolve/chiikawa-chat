@@ -105,18 +105,18 @@ function flushQueue() {
         setTimeout(flushQueue, 50);
       },
       fail(err) {
-        common_vendor.index.__f__("warn", "at utils/socket.js:128", "[socket] flushQueue 发送失败:", err);
+        common_vendor.index.__f__("warn", "at utils/socket.js:120", "[socket] flushQueue 发送失败:", err);
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:132", "[socket] flushQueue 异常:", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:124", "[socket] flushQueue 异常:", e);
   }
 }
 function persistQueue() {
   try {
     common_vendor.index.setStorageSync(QUEUE_KEY, messageQueue);
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:138", "[socket] persistQueue error", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:130", "[socket] persistQueue error", e);
   }
 }
 function loadQueueFromStorage() {
@@ -124,7 +124,7 @@ function loadQueueFromStorage() {
     const q = common_vendor.index.getStorageSync(QUEUE_KEY);
     messageQueue = Array.isArray(q) ? q : [];
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:145", "[socket] loadQueueFromStorage error", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:137", "[socket] loadQueueFromStorage error", e);
     messageQueue = [];
   }
 }
@@ -210,11 +210,29 @@ function fetchGroups(onResult) {
 }
 function sendMsg(msg, onStatusChange) {
   const data = { cmd: 2, type: "private", ...msg };
-  sendData(data, onStatusChange);
+  try {
+    sendData(data);
+    onStatusChange && onStatusChange("success");
+  } catch (e) {
+    common_vendor.index.__f__("error", "at utils/socket.js:257", "发送私聊失败", e);
+    onStatusChange && onStatusChange("failed");
+  }
 }
 function sendGroupMsg(msg, onStatusChange) {
   const data = { cmd: 3, type: "group", ...msg };
-  sendData(data, onStatusChange);
+  try {
+    sendData(data);
+    onStatusChange && onStatusChange("success");
+  } catch (e) {
+    common_vendor.index.__f__("error", "at utils/socket.js:269", "发送群聊失败", e);
+    onStatusChange && onStatusChange("failed");
+  }
+}
+function onPrivateMessage(callback) {
+  registerCmdHandler(2, callback);
+}
+function onGroupMessage(callback) {
+  registerCmdHandler(3, callback);
 }
 function sendReadAck(msgIds) {
   if (!Array.isArray(msgIds) || msgIds.length === 0)
@@ -223,6 +241,7 @@ function sendReadAck(msgIds) {
   if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
     try {
       socketTask.send({ data: JSON.stringify(ackData) });
+      common_vendor.index.__f__("log", "at utils/socket.js:287", "发送已读回执:", ackData);
     } catch (e) {
       messageQueue.push(ackData);
       persistQueue();
@@ -232,6 +251,14 @@ function sendReadAck(msgIds) {
     persistQueue();
   }
 }
+function fetchOfflinePrivateMessages(toUser, onResult) {
+  if (!toUser)
+    return;
+  const payload = { toUser };
+  const cmd = 211;
+  registerCmdHandler(cmd, onResult);
+  sendCmdMessage(cmd, payload);
+}
 function sendGroupCursor(groupId, lastMsgId) {
   if (!groupId)
     return;
@@ -240,7 +267,7 @@ function sendGroupCursor(groupId, lastMsgId) {
     try {
       socketTask.send({ data: JSON.stringify(data) });
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:286", "[socket] sendGroupCursor error", e);
+      common_vendor.index.__f__("error", "at utils/socket.js:308", "[socket] sendGroupCursor error", e);
     }
   }
 }
@@ -252,7 +279,7 @@ function sendGroupHistoryRequest(groupId, pageNum, pageSize) {
     try {
       socketTask.send({ data: JSON.stringify(data) });
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:295", "[socket] sendGroupHistoryRequest error", e);
+      common_vendor.index.__f__("error", "at utils/socket.js:317", "[socket] sendGroupHistoryRequest error", e);
     }
   }
 }
@@ -282,9 +309,12 @@ exports.createGroup = createGroup;
 exports.fetchFriendRequests = fetchFriendRequests;
 exports.fetchFriends = fetchFriends;
 exports.fetchGroups = fetchGroups;
+exports.fetchOfflinePrivateMessages = fetchOfflinePrivateMessages;
 exports.fetchSessions = fetchSessions;
 exports.isConnected = isConnected;
 exports.joinGroup = joinGroup;
+exports.onGroupMessage = onGroupMessage;
+exports.onPrivateMessage = onPrivateMessage;
 exports.registerCmdHandler = registerCmdHandler;
 exports.respondFriendRequest = respondFriendRequest;
 exports.sendFriendRequest = sendFriendRequest;
