@@ -1,0 +1,35 @@
+
+.page.data-v-db42cae2 {
+  padding: 20rpx;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+.function-list.data-v-db42cae2 {
+  background: #fff;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+.function-item.data-v-db42cae2 {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 20rpx;
+  border-bottom: 1px solid #eee;
+}
+.function-item.data-v-db42cae2:last-child {
+  border-bottom: none;
+}
+.icon.data-v-db42cae2 {
+  width: 48rpx;
+  height: 48rpx;
+  margin-right: 20rpx;
+}
+.label.data-v-db42cae2 {
+  font-size: 30rpx;
+}
+.list-item.data-v-db42cae2 { display: flex; align-items: center; padding: 20rpx 0; border-bottom: 1px solid #f5f5f5;
+}
+.avatar.data-v-db42cae2 { width: 80rpx; height: 80rpx; border-radius: 12rpx; margin-right: 20rpx;
+}
+.nickname.data-v-db42cae2 { font-size: 30rpx; font-weight: 600;
+}
+

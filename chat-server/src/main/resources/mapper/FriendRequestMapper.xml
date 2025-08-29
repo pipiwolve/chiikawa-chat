@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="org.tio.chat.mapper.FriendRequestMapper">
+
+    <insert id="insertRequest">
+        INSERT INTO friend_request(from_user, to_user, status)
+        VALUES(#{from}, #{to}, 'pending')
+            ON DUPLICATE KEY UPDATE status = 'pending'
+    </insert>
+
+    <select id="existsPending" resultType="int">
+        SELECT COUNT(*) FROM friend_request
+        WHERE from_user = #{from} AND to_user = #{to}
+          AND status = 'pending'
+    </select>
+
+    <select id="isAlreadyFriend" resultType="int">
+        SELECT COUNT(*) FROM chat_friend
+        WHERE (user_id = #{from} AND friend_id = #{to})
+           OR (user_id = #{to} AND friend_id = #{from})
+    </select>
+
+    <update id="updateStatus">
+        UPDATE friend_request
+        SET status = #{status}
+        WHERE from_user = #{from} AND to_user = #{to}
+    </update>
+
+    <!-- 获取当前用户的未处理好友申请 -->
+    <select id="getPendingRequests" parameterType="String" resultType="org.tio.chat.model.FriendRequest">
+        SELECT
+            fr.from_user AS fromUser,
+            fr.to_user AS toUser,
+            fr.status,
+            u.avatar,
+            fr.create_time AS createTime
+        FROM friend_request fr
+                 LEFT JOIN chat_user u ON fr.from_user = u.user_id
+        WHERE fr.to_user = #{userId}
+          AND fr.status = 'pending'
+        ORDER BY fr.create_time DESC
+    </select>
+
+
+</mapper>

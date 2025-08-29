@@ -1,13 +1,14 @@
 <template>
   <view class="page">
+    <!-- 最近会话列表 -->
     <view
         class="list-item"
-        v-for="(item, index) in users"
+        v-for="(item,index) in users"
         :key="index"
         @click="connect(item)"
     >
       <view class="avatar">
-        <text class="round" v-if="item.unread > 0">{{ item.unread }}</text>
+        <text class="round" v-if="item.unread > 0"></text>
         <image :src="item.avatar || defaultAvatar" mode="widthFix"></image>
       </view>
       <view class="content">
@@ -22,74 +23,54 @@
 </template>
 
 <script>
-import { connectSocket } from '@/utils/socket.js'
+import { fetchSessions, registerCmdHandler } from '@/utils/socket.js'
 
 export default {
   data() {
     return {
-      userId: '',
-      users: [], // 最近会话列表
-      defaultAvatar: '/static/default-avatar.png',
-      socketConnected: false,
-      socketTask: null
+      users: [],
+      defaultAvatar: '/static/default-avatar/helanzhu.png',
+      userId: ''
     }
   },
-  onLoad(options) {
-    this.userId = options.userId || ''
-    if (!this.userId) return
+  onLoad() {
+    this.userId = uni.getStorageSync('currentUserId') || ''
+    this.loadSessions()
 
-    // 建立 WebSocket 连接
-    this.socketTask = connectSocket(this.userId, this.handleWSMessage)
+    registerCmdHandler(205, (data) => {
+      // data.fromUser 表示申请人
+      uni.$emit("refreshFriendRequests")
+      // 可在 sessions 页面显示红点
+      uni.showToast({ title: `${data.fromUser} 申请加你为好友`, icon: "none" })
+    })
   },
+
   methods: {
-    // WebSocket 消息回调
-    handleWSMessage(msg) {
-      console.log('[WS] 收到消息:', msg)
-      // 最近会话列表返回
-      if (Array.isArray(msg) && msg.length && msg[0].sessionId) {
-        this.users = msg
-      }
+    // 获取最近会话（cmd=200）
+    loadSessions() {
+      fetchSessions((resp) => {
+        console.log('最近会话:', resp.sessions)
+        this.users = resp.sessions || []
+      })
     },
-
-    // 发送 cmd=200 请求最近会话
-    fetchSessions() {
-      const data = {cmd: 200, fromUser: this.userId}
-      if (this.socketTask && this.socketConnected) {
-        try {
-          this.socketTask.send({
-            data: JSON.stringify(data),
-            success: () => console.log('[WS] 请求最近会话成功'),
-            fail: (err) => console.error('[WS] 请求失败', err)
-          })
-        } catch (e) {
-          console.error('[WS] 发送异常', e)
-        }
-      }
-    },
-
-    // 点击跳转到聊天页面
+    // 点击会话进入聊天
     connect(item) {
       let query = ''
-      if (item.type === 'private') {
-        query = `?targetId=${item.sessionId}&type=private`
-      } else if (item.type === 'group') {
-        query = `?targetId=${item.sessionId}&type=group`
+      if (item.userId) {
+        query = `?targetId=${item.userId}&type=private`
+      } else if (item.groupId) {
+        query = `?targetId=${item.groupId}&type=group`
       }
       uni.navigateTo({
         url: '/pages/chat/chat' + query
       })
     },
-
     // 格式化时间
     formatTime(ts) {
       if (!ts) return ''
       const d = new Date(ts)
       return `${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`
     }
-  },
-  onShow() {
-    // 页面显示时请求最近会话
-    this.fetchSessions()
   }
 }
 </script>
@@ -104,53 +85,41 @@ export default {
   display: flex;
   padding: 30rpx 0;
   border-bottom: 1px solid #f7f8f9;
-
   .avatar {
     width: 90rpx;
     height: 90rpx;
     border-radius: 10rpx;
     margin-right: 20rpx;
     position: relative;
-
     .round {
       position: absolute;
-      width: 22rpx;
-      height: 22rpx;
+      width: 14rpx;
+      height: 14rpx;
       border-radius: 50%;
       background: #ef5656;
-      color: #fff;
-      font-size: 18rpx;
-      line-height: 22rpx;
-      text-align: center;
       top: -4rpx;
       right: -4rpx;
       z-index: 1;
     }
-
     image {
       width: 100%;
       height: 100%;
       border-radius: 10rpx;
     }
   }
-
   .content {
     flex: 1;
-
     .title {
       display: flex;
       justify-content: space-between;
-
       .name {
         font-weight: bold;
       }
-
       .time {
         color: #999;
         font-size: 24rpx;
       }
     }
-
     .txt {
       margin-top: 10rpx;
       overflow: hidden;

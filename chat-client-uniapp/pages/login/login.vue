@@ -41,9 +41,11 @@ export default {
           if (msg.cmd === 11 && msg.result === 'ok') {
             this.status = '登录成功，跳转中...'
 
-            // 跳转到消息中心 (sessions.vue)，带上 userId
-            uni.redirectTo({
-              url: '/pages/sessions/sessions?userId=' + this.userId
+            uni.setStorageSync('currentUserId', this.userId)
+
+            // 跳转到消息中心 (tabbar 页面)
+            uni.switchTab({
+              url: '/pages/sessions/sessions'
             })
           } else if (msg.cmd === 11 && msg.result === 'fail') {
             this.status = '登录失败，用户名或密码错误'
@@ -51,9 +53,6 @@ export default {
         })
         this.socketConnected = true
       }
-
-// 发送登录请求
-      sendLogin(this.userId, this.password)
 
       // 发送登录请求
       sendLogin(this.userId, this.password)

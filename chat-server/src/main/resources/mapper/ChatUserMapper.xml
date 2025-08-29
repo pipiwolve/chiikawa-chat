@@ -15,7 +15,29 @@
     </select>
 
     <select id="login" parameterType="map" resultType="org.tio.chat.model.ChatUser">
-        SELECT * FROM chat_user WHERE user_id = #{userId} AND password = #{password}
+        SELECT u.user_id AS userId,
+               u.username,
+               u.avatar
+        FROM chat_user u WHERE user_id = #{userId} AND password = #{password}
     </select>
+
+    <select id="getFriends" resultType="org.tio.chat.model.ChatUser">
+        SELECT u.user_id As userId,
+               u.username,
+               u.password,
+               u.create_time AS createTime,
+               u.avatar
+        FROM chat_friend f
+                 JOIN chat_user u ON u.user_id = f.friend_id
+        WHERE f.user_id = #{userId}
+    </select>
+
+    <select id="isFriendExist" resultType="int">
+        SELECT COUNT(*) FROM chat_friend WHERE user_id = #{userId} AND friend_id = #{friendId}
+    </select>
+
+    <insert id="insertFriend">
+        INSERT INTO chat_friend(user_id, friend_id) VALUES(#{userId}, #{friendId})
+    </insert>
 
 </mapper>

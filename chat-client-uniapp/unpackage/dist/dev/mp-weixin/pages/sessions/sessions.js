@@ -4,50 +4,34 @@ const utils_socket = require("../../utils/socket.js");
 const _sfc_main = {
   data() {
     return {
-      userId: "",
       users: [],
-      // 最近会话列表
-      defaultAvatar: "/static/default-avatar.png",
-      socketConnected: false,
-      socketTask: null
+      defaultAvatar: "/static/default-avatar/helanzhu.png",
+      userId: ""
     };
   },
-  onLoad(options) {
-    this.userId = options.userId || "";
-    if (!this.userId)
-      return;
-    this.socketTask = utils_socket.connectSocket(this.userId, this.handleWSMessage);
+  onLoad() {
+    this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
+    this.loadSessions();
+    utils_socket.registerCmdHandler(205, (data) => {
+      common_vendor.index.$emit("refreshFriendRequests");
+      common_vendor.index.showToast({ title: `${data.fromUser} 申请加你为好友`, icon: "none" });
+    });
   },
   methods: {
-    // WebSocket 消息回调
-    handleWSMessage(msg) {
-      common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:47", "[WS] 收到消息:", msg);
-      if (Array.isArray(msg) && msg.length && msg[0].sessionId) {
-        this.users = msg;
-      }
+    // 获取最近会话（cmd=200）
+    loadSessions() {
+      utils_socket.fetchSessions((resp) => {
+        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:52", "最近会话:", resp.sessions);
+        this.users = resp.sessions || [];
+      });
     },
-    // 发送 cmd=200 请求最近会话
-    fetchSessions() {
-      const data = { cmd: 200, fromUser: this.userId };
-      if (this.socketTask && this.socketConnected) {
-        try {
-          this.socketTask.send({
-            data: JSON.stringify(data),
-            success: () => common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:61", "[WS] 请求最近会话成功"),
-            fail: (err) => common_vendor.index.__f__("error", "at pages/sessions/sessions.vue:62", "[WS] 请求失败", err)
-          });
-        } catch (e) {
-          common_vendor.index.__f__("error", "at pages/sessions/sessions.vue:65", "[WS] 发送异常", e);
-        }
-      }
-    },
-    // 点击跳转到聊天页面
+    // 点击会话进入聊天
     connect(item) {
       let query = "";
-      if (item.type === "private") {
-        query = `?targetId=${item.sessionId}&type=private`;
-      } else if (item.type === "group") {
-        query = `?targetId=${item.sessionId}&type=group`;
+      if (item.userId) {
+        query = `?targetId=${item.userId}&type=private`;
+      } else if (item.groupId) {
+        query = `?targetId=${item.groupId}&type=group`;
       }
       common_vendor.index.navigateTo({
         url: "/pages/chat/chat" + query
@@ -60,9 +44,6 @@ const _sfc_main = {
       const d = new Date(ts);
       return `${d.getHours()}:${d.getMinutes().toString().padStart(2, "0")}`;
     }
-  },
-  onShow() {
-    this.fetchSessions();
   }
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
@@ -70,15 +51,13 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
     a: common_vendor.f($data.users, (item, index, i0) => {
       return common_vendor.e({
         a: item.unread > 0
-      }, item.unread > 0 ? {
-        b: common_vendor.t(item.unread)
-      } : {}, {
-        c: item.avatar || $data.defaultAvatar,
-        d: common_vendor.t(item.nickname || item.name),
-        e: common_vendor.t($options.formatTime(item.lastTime)),
-        f: common_vendor.t(item.lastMsg || "暂无消息"),
-        g: index,
-        h: common_vendor.o(($event) => $options.connect(item), index)
+      }, item.unread > 0 ? {} : {}, {
+        b: item.avatar || $data.defaultAvatar,
+        c: common_vendor.t(item.nickname || item.name),
+        d: common_vendor.t($options.formatTime(item.lastTime)),
+        e: common_vendor.t(item.lastMsg || "暂无消息"),
+        f: index,
+        g: common_vendor.o(($event) => $options.connect(item), index)
       });
     })
   };

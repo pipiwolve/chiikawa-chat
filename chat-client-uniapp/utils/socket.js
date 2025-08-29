@@ -7,6 +7,7 @@ let currentUserId = null;
 let messageQueue = [];
 const QUEUE_KEY = 'socket_message_queue';
 let onReadAck = null;
+let cmdCallbacks = {}; // 存放 cmd -> 回调
 
 const msgStatusCallbacks = new Map();
 const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
@@ -48,6 +49,12 @@ export function connectSocket(userId, onMessage) {
 
         try {
             const data = JSON.parse(dataStr);
+
+            // 🔹 分发给已注册的 cmd 回调
+            if (data.cmd && cmdCallbacks[data.cmd]) {
+                cmdCallbacks[data.cmd](data);
+                return;
+            }
 
             // 已读回执 101
             if (data && typeof data === 'object' && data.cmd === 101 && data.msgIds && Array.isArray(data.msgIds)) {
@@ -172,12 +179,24 @@ function sendData(data, onStatusChange) {
 }
 
 // 🔹 新增通用业务消息发送函数
-export function sendCmdMessage(cmd, payload = {}, onStatusChange) {
+export function sendCmdMessage(cmd, payload = {}) {
     const data = { cmd, fromUser: currentUserId, ...payload };
-    sendData(data, onStatusChange);
+    sendData(data);
 }
 
-// 🔹 注册/登录封装
+// 注册好友功能回调
+export function registerCmdHandler(cmd, callback) {
+    cmdCallbacks[cmd] = callback;
+}
+
+export function unregisterCmdHandler(cmd) {
+    delete cmdCallbacks[cmd]
+}
+
+// ===============================
+// 登录注册
+// ===============================
+
 export function sendRegister(userId, password, nickname) {
     sendCmdMessage(10, { fromUser: userId, content: password, nickname });
 }
@@ -185,6 +204,56 @@ export function sendRegister(userId, password, nickname) {
 export function sendLogin(userId, password) {
     sendCmdMessage(11, { fromUser: userId, content: password });
 }
+
+// ===============================
+// 会话/好友/群聊相关封装
+// ===============================
+
+// 获取最近会话
+export function fetchSessions(onResult) {
+    registerCmdHandler(200, onResult);
+    sendCmdMessage(200);
+}
+
+// 加入群聊
+export function joinGroup(groupId, role = "member") {
+    sendCmdMessage(201, { groupId, role });
+}
+
+// 添加好友（发起申请）
+export function sendFriendRequest(toUser) {
+    sendCmdMessage(202, { toUser });
+}
+
+// 创建群聊
+export function createGroup(groupName, members) {
+    sendCmdMessage(203, { content: groupName, msgIds: members });
+}
+
+// 🔹 获取好友申请列表
+export function fetchFriendRequests(onResult) {
+    registerCmdHandler(209, onResult)
+    sendCmdMessage(209)
+}
+
+// 响应好友请求
+export function respondFriendRequest(requester, fromUser , action) {
+    sendCmdMessage(206, { requester, fromUser, action});
+}
+
+// 获取好友列表
+export function fetchFriends(onResult) {
+    registerCmdHandler(208, onResult);
+    sendCmdMessage(208);
+}
+
+// 获取我的群聊列表（cmd=212）
+export function fetchGroups(onResult) {
+    registerCmdHandler(212, onResult);
+    sendCmdMessage(212);
+}
+
+
 
 // 保留私聊/群聊消息发送接口
 export function sendMsg(msg, onStatusChange) {

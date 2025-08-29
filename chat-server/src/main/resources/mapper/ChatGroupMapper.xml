@@ -6,16 +6,28 @@
 
     <!-- 新建群 -->
     <insert id="insertGroup" parameterType="org.tio.chat.model.ChatGroup">
-        INSERT INTO chat_group (group_id, group_name)
-        VALUES (#{groupId}, #{groupName})
+        INSERT INTO chat_group (group_id, group_name, owner_id, avatar)
+        VALUES (#{g.groupId}, #{g.groupName}, #{g.ownerId}, #{g.avatar})
     </insert>
+
+    <delete id="removeMember" parameterType="org.tio.chat.model.ChatGroupMember">
+        DELETE FROM chat_group_member
+        WHERE group_id = #{groupId}
+        AND user_id = #{userId}
+    </delete>
 
     <!-- 添加成员 -->
     <insert id="addMember" parameterType="org.tio.chat.model.ChatGroupMember">
-        INSERT INTO chat_group_member (group_id, user_id)
-        VALUES (#{groupId}, #{userId})
+        INSERT INTO chat_group_member (group_id, user_id, role)
+        VALUES (#{groupId}, #{userId}, #{role})
             ON DUPLICATE KEY UPDATE join_time = NOW()
     </insert>
+
+    <!-- 通过群id查找群 -->
+    <select id="getGroupById" resultType="org.tio.chat.model.ChatGroup">
+        SELECT group_id AS groupId, group_name AS groupName, avatar AS avatar
+        FROM chat_group WHERE group_id = #{groupId}
+    </select>
 
     <!-- 查询群成员 -->
     <select id="getGroupMembers" parameterType="string" resultType="string">
@@ -29,10 +41,15 @@
 
     <!-- 查询用户所在群组对象 -->
     <select id="getUserGroupObjects" resultType="org.tio.chat.model.ChatGroup">
-        SELECT g.*
+        SELECT  g.group_id   AS groupId,
+                g.group_name AS groupName,
+                g.avatar     AS avatar,
+                g.owner_id   AS ownerId,
+                g.create_time  AS createTime
         FROM chat_group g
                  JOIN chat_group_member m ON g.group_id = m.group_id
         WHERE m.user_id = #{userId}
+        ORDER BY g.create_time DESC
     </select>
 
     <!-- 更新群成员已读游标 -->
@@ -96,15 +113,6 @@
         ]]>
     </select>
 
-    <!-- 查询群聊最后一条消息 -->
-    <select id="selectLastGroupMessage" resultType="org.tio.chat.model.ChatMessage">
-        SELECT *
-        FROM chat_message
-        WHERE group_id = #{groupId} AND cmd = 3
-        ORDER BY create_time DESC
-        LIMIT 1
-    </select>
-
     <!-- 统计用户在群里的未读消息数 -->
     <select id="countUnreadGroupMessages" resultType="int">
         SELECT COUNT(*)
@@ -113,9 +121,13 @@
                            ON cm.group_id = c.group_id AND c.user_id = #{userId}
         WHERE cm.group_id = #{groupId}
           AND cm.cmd = 3
-          AND cm.create_time > COALESCE(c.create_time, '1970-01-01')
+          AND cm.create_time > COALESCE(c.update_time, '1970-01-01')
     </select>
 
 
+    <!-- 查找用户是否已在群内 -->
+    <select id="findMember" resultType="org.tio.chat.model.ChatGroupMember">
+        SELECT * FROM chat_group_member WHERE group_id = #{groupId} AND user_id = #{userId}
+    </select>
 
 </mapper>

@@ -4,12 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tio.chat.config.ChatServerConfig;
 import org.tio.chat.constant.ChatConst;
-import org.tio.chat.model.ChatMessage;
-import org.tio.chat.model.ChatSession;
-import org.tio.chat.model.ChatUser;
-import org.tio.chat.service.ChatService;
-import org.tio.chat.service.ChatSessionService;
-import org.tio.chat.service.ChatUserService;
+import org.tio.chat.model.*;
+import org.tio.chat.service.*;
 import org.tio.chat.util.JsonUtil;
 import org.tio.core.ChannelContext;
 import org.tio.core.Tio;
@@ -19,9 +15,9 @@ import org.tio.utils.lock.SetWithLock;
 import org.tio.websocket.common.WsRequest;
 import org.tio.websocket.common.WsResponse;
 import org.tio.websocket.server.handler.IWsMsgHandler;
-import org.tio.chat.service.ChatGroupService;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 
 /**
@@ -135,7 +131,7 @@ public class ChatWsHandler implements IWsMsgHandler {
                     if (user != null) {
                         result.put("cmd", 11);
                         result.put("result", "ok");
-                        result.put("nickname", user.getUsername());
+                        result.put("nickname", user.getUserName());
 
                         handleUserLoginSuccess(user, userId, channelContext);
                     } else {
@@ -157,7 +153,8 @@ public class ChatWsHandler implements IWsMsgHandler {
                     ChatGroupService.broadcastGroupCursor(chatMessage, channelContext);
                     break;
 
-                case 103: { // 历史信息加载
+                // 历史信息加载
+                case 103: {
                     List<ChatMessage> history = ChatGroupService.loadGroupHistory(chatMessage.getFromUser(), chatMessage.getGroupId(), chatMessage.getPageNum(), chatMessage.getPageSize());
 
                     WsResponse resp = WsResponse.fromText(JsonUtil.toJson(history), ChatServerConfig.CHARSET);
@@ -165,24 +162,200 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
                 }
 
-                case 200: { // 获取最近会话列表
-                    String userId = chatMessage.getFromUser();
-                    if (userId == null || userId.trim().isEmpty()) return null;
-
-                    List<ChatSession> sessions = ChatSessionService.getRecentSessions(userId);
-                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(sessions), ChatServerConfig.CHARSET);
-                    Tio.send(channelContext, resp);
+                // 获取最近会话
+                case 200: {
+                    List<ChatSession> sessions = ChatSessionService.getRecentSessions(chatMessage.getFromUser());
+                    Map<String, Object> resp200 = new HashMap<>();
+                    resp200.put("cmd", 200);
+                    resp200.put("sessions", sessions);
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp200), CHARSET));
                     break;
                 }
 
-                case 201: // 加入群聊
-                    ChatGroupService.joinGroup(chatMessage.getGroupId(), chatMessage.getFromUser(), channelContext);
+                //加入群组
+                case 201: {
+                    boolean ok = ChatGroupService.joinGroup(chatMessage.getGroupId(), chatMessage.getFromUser(), channelContext);
+                    Map<String,Object> resp201 = new HashMap<>();
+                    resp201.put("cmd", 201);
+                    resp201.put("result", ok ? "ok" : "fail");
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp201), CHARSET));
                     break;
+                }
+
+                // 创建群聊
+                case 203: {      // 鉴权：必须已登录（T-io 已绑定 userId）
+                    if (channelContext.userid == null || !channelContext.userid.equals(chatMessage.getFromUser())) {
+                        Map<String,Object> err = new HashMap<>();
+                        err.put("cmd", 203);
+                        err.put("result", "fail");
+                        err.put("reason", "unauthorized");
+                        Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(err), ChatServerConfig.CHARSET));
+                        break;
+                    }
+
+                    String ownerId = chatMessage.getFromUser();
+                    String groupName = chatMessage.getContent();
+                    List<String> members = chatMessage.getMsgIds(); // 复用 msgIds
+
+                    ChatGroup group = ChatGroupService.createGroup(ownerId, groupName, members, channelContext);
+
+                    // 回执给创建者
+                    Map<String, Object> ok = new HashMap<>();
+                    ok.put("cmd", 203);
+                    ok.put("result", "ok");
+                    ok.put("groupId", group.getGroupId());
+                    ok.put("groupName", group.getGroupName());
+                    ok.put("creatTime", group.getCreatTime());
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(ok), ChatServerConfig.CHARSET));
+
+                    // 可选：通知其他初始成员（在线才会收到）
+                    if (members != null) {
+                        for (String uid : new LinkedHashSet<>(members)) {
+                            if (uid == null || uid.equals(ownerId)) continue;
+                            SetWithLock<ChannelContext> mCtx = Tio.getChannelContextsByUserid(channelContext.tioConfig, uid);
+                            if (mCtx != null) {
+                                Map<String,Object> notify = new HashMap<>();
+                                notify.put("cmd", 204); // 204 = 被拉入新群通知
+                                notify.put("groupId", group.getGroupId());
+                                notify.put("groupName", group.getGroupName());
+                                notify.put("inviter", ownerId);
+                                Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(notify), ChatServerConfig.CHARSET));
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                // 获取群聊列表
+                case 212: {
+                    String userId = chatMessage.getFromUser();
+                    List<ChatGroup> groups = ChatGroupService.getGroupsByUser(userId);
+
+                    // 也可以映射成轻量 DTO，这里直接回 Group 基础字段
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("cmd", 212);
+                    resp.put("groups", groups.stream().map(g -> {
+                        GroupDTO groupDTO = new GroupDTO();
+                        groupDTO.setGroupId(g.getGroupId());
+                        groupDTO.setGroupName(g.getGroupName());
+                        groupDTO.setAvatar(g.getAvatar());
+                        return groupDTO;
+                    }).collect(Collectors.toList()));
+
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), CHARSET));
+                    break;
+                }
+
+                // 发送好友申请
+                case 202: {
+                    String from = chatMessage.getFromUser();
+                    String to = chatMessage.getToUser();
+
+                    if (from == null || !from.equals(channelContext.userid)) {
+                        sendFail(channelContext, 202, "unauthorized");
+                        break;
+                    }
+
+                    boolean inserted = FriendRequestService.createRequest(from, to);
+
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("cmd", 202);
+                    resp.put("result", inserted ? "pending" : "fail");
+                    if (!inserted) resp.put("reason", "already_requested_or_exists");
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), CHARSET));
+
+                    if (inserted) {
+                        // 通知目标用户（如果在线）
+                        Map<String,Object> notify = new HashMap<>();
+                        notify.put("cmd", 205);  // 好友申请通知
+                        notify.put("fromUser", from);
+                        notify.put("message", from + " 想加你为好友");
+                        notify.put("timestamp", System.currentTimeMillis());
+
+                        Tio.sendToUser(channelContext.tioConfig, to,
+                                WsResponse.fromText(JsonUtil.toJson(notify), CHARSET));
+                    }
+                    break;
+                }
+
+                // 处理好友申请
+                case 206: {
+                    String from = chatMessage.getFromUser(); // 发起 accept/reject 的用户
+                    String requester = chatMessage.getRequester(); // 谁申请的
+                    String action = chatMessage.getAction();   // "accept" or "reject"
+
+                    if (from == null || !from.equals(channelContext.userid)) {
+                        sendFail(channelContext, 206, "unauthorized");
+                        break;
+                    }
+
+                    boolean ok = FriendRequestService.handleRequest(requester, from, action);
+
+                    Map<String,Object> resp = new HashMap<>();
+                    resp.put("cmd", 206);
+                    resp.put("result", ok ? "ok" : "fail");
+                    resp.put("action", action);
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), CHARSET));
+
+                    if (ok && "accept".equals(action)) {
+                        // 插入 chat_user_friend 双向关系
+                        ChatUserService.addFriend(requester, from);
+                        ChatUserService.addFriend(from, requester);
+
+                        // 通知两端好友已建立
+                        Map<String,Object> notify = new HashMap<>();
+                        notify.put("cmd", 207);
+                        notify.put("result", "friend_added");
+                        notify.put("userId", requester);
+                        notify.put("friendId", from);
+
+                        Tio.sendToUser(channelContext.tioConfig, requester,
+                                WsResponse.fromText(JsonUtil.toJson(notify), CHARSET));
+                        Tio.sendToUser(channelContext.tioConfig, from,
+                                WsResponse.fromText(JsonUtil.toJson(notify), CHARSET));
+                    }
+                    break;
+                }
+
+                // 获取好友列表
+                case 208: {
+                    if (channelContext.userid == null || !channelContext.userid.equals(chatMessage.getFromUser())) {
+                        sendFail(channelContext, 208, "unauthorized");
+                        break;
+                    }
+
+                    List<FriendDTO> friends = ChatUserService.getFriends(chatMessage.getFromUser()).stream()
+                            .map(u -> {
+                                FriendDTO f = new FriendDTO();
+                                f.setUserId(u.getUserId());
+                                f.setUsername(u.getUserName());
+                                f.setAvatar(u.getAvatar());
+                                return f;
+                            }).collect(Collectors.toList());
+
+
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("cmd", 208);
+                    resp.put("friends", friends);
+
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), ChatServerConfig.CHARSET));
+                    break;
+                }
+
+                // 获取待处理好友申请
+                case 209: {
+                    List<FriendRequest> requests = FriendRequestService.getPendingRequests(chatMessage.getFromUser());
+                    Map<String, Object> resp209 = new HashMap<>();
+                    resp209.put("cmd", 209);
+                    resp209.put("requests", requests);
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp209), CHARSET));
+                    break;
+                }
             }
-        return null;
     } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        return null;
     }
 
     /**
@@ -206,7 +379,7 @@ public class ChatWsHandler implements IWsMsgHandler {
         int count = Tio.getAll(channelContext.tioConfig).getObj().size();
         ChatMessage sysMsg = new ChatMessage();
         sysMsg.setFromUser("系统");
-        sysMsg.setContent(user.getUsername() + " 上线了，共【" + count + "】人在线");
+        sysMsg.setContent(user.getUserName() + " 上线了，共【" + count + "】人在线");
         Tio.sendToGroup(channelContext.tioConfig, ChatConst.GROUP_ID,
                 WsResponse.fromText(JsonUtil.toJson(sysMsg), ChatServerConfig.CHARSET));
 
@@ -227,6 +400,21 @@ public class ChatWsHandler implements IWsMsgHandler {
             }
             ChatService.clearOfflineReadReceipts(userId);
         }
+    }
+
+
+    /**
+     * 发送失败条件下回执
+     * @param channelContext
+     * @param cmd
+     * @param reason
+     */
+    private void sendFail(ChannelContext channelContext, int cmd, String reason) {
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("cmd", cmd);
+        resp.put("result", "fail");
+        resp.put("reason", reason);
+        Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), ChatServerConfig.CHARSET));
     }
 
     @Override

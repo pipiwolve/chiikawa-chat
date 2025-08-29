@@ -7,6 +7,12 @@ if (!Math) {
   "./pages/login/login.js";
   "./pages/register/register.js";
   "./pages/sessions/sessions.js";
+  "./pages/friends/friends.js";
+  "./pages/add-friend/add-friend.js";
+  "./pages/join-group/join-group.js";
+  "./pages/create-group/create-group.js";
+  "./pages/friends-request/friends-request.js";
+  "./pages/groups/groups.js";
 }
 const _sfc_main = {
   onLaunch: function() {

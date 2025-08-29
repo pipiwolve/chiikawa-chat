@@ -9,7 +9,7 @@ public class ChatGroupMember {
     private String groupId;
     private String userId;
     private Timestamp joinTime;
-
+    private String role;
     // 群聊已读游标（可选）
     private String lastReadMsgId;
 }

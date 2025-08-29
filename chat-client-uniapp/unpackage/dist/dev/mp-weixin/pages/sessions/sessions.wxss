@@ -18,14 +18,10 @@
 }
 .list-item .avatar .round.data-v-9437a25b {
   position: absolute;
-  width: 22rpx;
-  height: 22rpx;
+  width: 14rpx;
+  height: 14rpx;
   border-radius: 50%;
   background: #ef5656;
-  color: #fff;
-  font-size: 18rpx;
-  line-height: 22rpx;
-  text-align: center;
   top: -4rpx;
   right: -4rpx;
   z-index: 1;

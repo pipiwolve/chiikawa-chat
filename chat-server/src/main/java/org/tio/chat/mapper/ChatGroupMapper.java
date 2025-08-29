@@ -8,12 +8,9 @@ import org.tio.chat.model.ChatMessage;
 import java.util.Date;
 import java.util.List;
 
-/**
- * ChatGroupMapper
- *
- * 负责群聊相关的数据库操作，包括群组管理、群成员管理、群消息游标管理等
- */
+
 public interface ChatGroupMapper {
+
 
     /**
      * 插入或更新用户在某个群聊中的已读游标
@@ -26,19 +23,20 @@ public interface ChatGroupMapper {
                       @Param("groupId") String groupId,
                       @Param("lastReadMsgId") String lastReadMsgId);
 
-    /**
-     * 添加群成员
-     *
-     * @param member ChatGroupMember 对象，包含 groupId 和 userId
-     */
-    void addMember(ChatGroupMember member);
+
+    int addMember(@Param("groupId") String groupId,
+                     @Param("userId")  String userId,
+                     @Param("role")    String role);
+
+
+    void removeMember(@Param("groupId") String groupId, @Param("userId")String userId);
 
     /**
      * 创建新的群组
      *
      * @param chatGroup ChatGroup 对象，包含 groupId、groupName 等信息
      */
-    void insertGroup(ChatGroup chatGroup);
+    void insertGroup(@Param("g") ChatGroup chatGroup);
 
     /**
      * 获取群组中所有成员的用户ID列表
@@ -55,6 +53,13 @@ public interface ChatGroupMapper {
      * @return List<String> 群组ID列表
      */
     List<String> getUserGroups(@Param("userId") String userId);
+
+    /**
+     * 通过群组id返回对应群组对象
+     * @param groupId
+     * @return
+     */
+    ChatGroup getGroupById(@Param("groupId") String groupId);
 
     /**
      * 更新用户在群聊中的最后已读消息游标
@@ -120,5 +125,15 @@ public interface ChatGroupMapper {
      * @param groupId
      * @return
      */
-    Integer countUnreadGroupMessages(String userId, String groupId);
+    Integer countUnreadGroupMessages(@Param("userId") String userId, @Param("groupId") String groupId);
+
+    /**
+     * 查找用户是否已经存在群组内
+     * @param groupId
+     * @param userId
+     * @return
+     */
+    ChatGroupMember findMember(@Param("groupId") String groupId,
+                               @Param("userId") String userId);
+
 }

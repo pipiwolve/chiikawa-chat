@@ -14,13 +14,17 @@ import java.util.Date;
 @AllArgsConstructor
 public class ChatUser implements Serializable {
 
-    private String username;
-
     private String userId;
+
+    private String userName;
 
     private String password;
 
     private Date createTime;
+
+    private String avatar;
+
+
 
 
 

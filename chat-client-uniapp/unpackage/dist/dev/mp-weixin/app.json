@@ -4,13 +4,39 @@
     "pages/chat/chat",
     "pages/login/login",
     "pages/register/register",
-    "pages/sessions/sessions"
+    "pages/sessions/sessions",
+    "pages/friends/friends",
+    "pages/add-friend/add-friend",
+    "pages/join-group/join-group",
+    "pages/create-group/create-group",
+    "pages/friends-request/friends-request",
+    "pages/groups/groups"
   ],
   "window": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "uni-app",
     "navigationBarBackgroundColor": "#F8F8F8",
     "backgroundColor": "#F8F8F8"
+  },
+  "tabBar": {
+    "color": "#999",
+    "selectedColor": "#07c160",
+    "borderStyle": "black",
+    "backgroundColor": "#fff",
+    "list": [
+      {
+        "pagePath": "pages/sessions/sessions",
+        "text": "消息",
+        "iconPath": "static/tabbar/chat.png",
+        "selectedIconPath": "static/tabbar/chat-active.png"
+      },
+      {
+        "pagePath": "pages/friends/friends",
+        "text": "联系人",
+        "iconPath": "static/tabbar/friends.png",
+        "selectedIconPath": "static/tabbar/friends-active.png"
+      }
+    ]
   },
   "usingComponents": {}
 }

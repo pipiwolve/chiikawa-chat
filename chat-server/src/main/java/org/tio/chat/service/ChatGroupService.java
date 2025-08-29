@@ -1,8 +1,10 @@
 package org.tio.chat.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.SqlSession;
 import org.tio.chat.config.ChatServerConfig;
 import org.tio.chat.mapper.ChatGroupMapper;
+import org.tio.chat.model.ChatGroup;
 import org.tio.chat.model.ChatGroupMember;
 import org.tio.chat.model.ChatMessage;
 import org.tio.chat.util.JsonUtil;
@@ -10,36 +12,116 @@ import org.tio.core.ChannelContext;
 import org.tio.core.Tio;
 import org.tio.websocket.common.WsResponse;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 
 
 import static org.tio.chat.service.ChatService.*;
 
+@Slf4j
 public class ChatGroupService {
 
     private static ChatGroupMapper chatGroupMapper;
+
 
     public ChatGroupService(ChatGroupMapper chatGroupMapper) {
         this.chatGroupMapper = chatGroupMapper;
     }
 
+
+    /**
+     * 创建群
+     * @param ownerId
+     * @param groupName
+     * @param memberIds
+     * @param ctx
+     * @return
+     */
+    public static ChatGroup createGroup(String ownerId, String groupName, List<String> memberIds, ChannelContext ctx) {
+        if (ownerId == null || ownerId.trim().isEmpty()) throw new RuntimeException("ownerId required");
+        if (groupName == null || groupName.trim().isEmpty()) throw new RuntimeException("groupName required");
+
+        String groupId = "group_" + UUID.randomUUID().toString().replace("-", "");
+
+        // 1) 持久化
+        try (SqlSession s = SQL_SESSION_FACTORY.openSession(true)) {
+            ChatGroupMapper mapper = s.getMapper(ChatGroupMapper.class);
+
+            ChatGroup g = new ChatGroup();
+            g.setGroupId(groupId);
+            g.setGroupName(groupName);
+            g.setOwnerId(ownerId);
+            g.setAvatar(null);
+            mapper.insertGroup(g);
+
+            // 成员去重，确保 owner 在第一个
+            LinkedHashSet<String> members = new LinkedHashSet<>();
+            members.add(ownerId);
+            if (memberIds != null) {
+                for (String m : memberIds) {
+                    if (m != null && !m.trim().isEmpty())
+                        members.add(m.trim());
+                }
+            }
+
+            for (String uid : members) {
+                 String role = ownerId.equals(uid) ? "owner" : "member";
+                 mapper.addMember(groupId, uid, role);
+            }
+
+            // 查询回填
+            ChatGroup out = mapper.getGroupById(groupId);
+
+            // 2) 绑定创建者到 group
+            if (ctx != null) {
+                Tio.bindGroup(ctx, groupId);
+            }
+
+
+            return out;
+        }
+    }
     /**
      * 用户加入群聊
+     *
+     * @return
      */
-    public static void joinGroup(String groupId, String userId, ChannelContext ctx) {
-        ChatGroupMember member = new ChatGroupMember();
-        member.setGroupId(groupId);
-        member.setUserId(userId);
-        chatGroupMapper.addMember(member);
+    public static boolean joinGroup(String groupId, String userId, ChannelContext ctx) {
+        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
+            ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
 
-        // 在线绑定
-        Tio.bindGroup(ctx, groupId);
+            // 检查用户是否已在群里
+            ChatGroupMember existing = mapper.findMember(groupId, userId);
+            if (existing == null) {
+                String role = "member";
+                mapper.addMember(groupId, userId, role);
+                // tio 层绑定群
+                Tio.bindGroup(ctx, groupId);
+                log.info("用户 [{}] 以角色 [{}] 加入群 [{}]", userId, role, groupId);
+                return true;
+            } else {
+                log.info("用户 [{}] 已在群 [{}] 中，无需重复加入", userId, groupId);
+                return false;
+            }
+        }
+
+    }
+
+    public static void leaveGroup(String groupId, String userId, ChannelContext ctx) {
+        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
+            ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
+            mapper.removeMember(groupId, userId);
+        }
+        Tio.unbindGroup(groupId, ctx);
+    }
+
+    // 群组列表展示
+    public static List<ChatGroup> getGroupsByUser(String userId) {
+        try (SqlSession s = SQL_SESSION_FACTORY.openSession()) {
+            ChatGroupMapper mapper = s.getMapper(ChatGroupMapper.class);
+            return mapper.getUserGroupObjects(userId);
+        }
     }
 
     /**
@@ -170,6 +252,7 @@ public class ChatGroupService {
         // 广播给群里所有人（包括发送方自己，可根据需求排除）
         Tio.sendToGroup(ctx.tioConfig, cursorMsg.getGroupId(), resp);
     }
+
 
     public static List<ChatMessage> loadGroupHistory(String userId, String groupId, Integer pageNum, Integer pageSize) {
         if (userId == null || groupId == null) return Collections.emptyList();

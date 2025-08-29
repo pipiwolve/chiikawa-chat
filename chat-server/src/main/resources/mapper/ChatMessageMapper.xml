@@ -71,6 +71,15 @@
             ORDER BY create_time DESC
         </select>
 
+    <!-- 查询群聊最后一条消息 -->
+    <select id="selectLastGroupMessage" resultType="org.tio.chat.model.ChatMessage">
+        SELECT *
+        FROM chat_message
+        WHERE group_id = #{groupId} AND cmd = 3
+        ORDER BY create_time DESC
+        LIMIT 1
+    </select>
+
 
         <!-- 统计用户与某私聊对象未读消息数 -->
         <select id="countUnreadPrivateMessages" resultType="int">
@@ -81,6 +90,7 @@
               AND to_user = #{userId}
               AND is_read = FALSE
         </select>
+
 
 
 </mapper>

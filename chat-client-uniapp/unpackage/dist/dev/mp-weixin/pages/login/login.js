@@ -21,8 +21,9 @@ const _sfc_main = {
           common_vendor.index.__f__("log", "at pages/login/login.vue:38", "[WS] 收到消息:", msg);
           if (msg.cmd === 11 && msg.result === "ok") {
             this.status = "登录成功，跳转中...";
-            common_vendor.index.redirectTo({
-              url: "/pages/sessions/sessions?userId=" + this.userId
+            common_vendor.index.setStorageSync("currentUserId", this.userId);
+            common_vendor.index.switchTab({
+              url: "/pages/sessions/sessions"
             });
           } else if (msg.cmd === 11 && msg.result === "fail") {
             this.status = "登录失败，用户名或密码错误";
@@ -31,12 +32,11 @@ const _sfc_main = {
         this.socketConnected = true;
       }
       utils_socket.sendLogin(this.userId, this.password);
-      utils_socket.sendLogin(this.userId, this.password);
       utils_socket.setReadAckHandler((msgIds) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:63", "[已读回执]", msgIds);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:62", "[已读回执]", msgIds);
       });
       utils_socket.setGroupHistoryHandler((history) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:66", "[群历史]", history);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:65", "[群历史]", history);
       });
       this.status = "登录请求已发送...";
     },
