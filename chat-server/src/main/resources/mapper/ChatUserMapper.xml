@@ -7,7 +7,7 @@
 
     <insert id="insertUser" parameterType="org.tio.chat.model.ChatUser">
         INSERT INTO chat_user(user_id, password, username)
-        VALUES (#{user.userId}, #{user.password}, #{user.username})
+        VALUES (#{userId}, #{password}, #{userName})
     </insert>
 
     <select id="findById" parameterType="String" resultType="org.tio.chat.model.ChatUser">

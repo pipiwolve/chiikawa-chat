@@ -97,15 +97,17 @@
 
     <!-- 通过游标id取到游标时间 -->
     <select id="getCreateTimeByMsgId" resultType="java.util.Date">
-        SELECT update_time
-        FROM chat_group_cursor
-        WHERE last_read_msg_id = #{lastCursor}
+        SELECT create_time
+        FROM chat_message
+        WHERE msg_id = #{lastCursor}
+          AND cmd = 3
+        LIMIT 1
     </select>
 
     <!-- 查询群聊历史消息，按创建时间倒序 -->
     <select id="selectGroupHistory" resultType="org.tio.chat.model.ChatMessage">
         <![CDATA[
-        SELECT msg_id, from_user, to_user, group_id, content, cmd, is_read, is_offline, create_time
+        SELECT msg_id AS msgId, from_user AS fromUser, to_user AS fromUser, group_id AS groupId, content, cmd, is_offline, create_time AS createTime
         FROM chat_message
         WHERE group_id = #{groupId}
         AND create_time <= #{cursorTime}

@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface ChatUserMapper {
 
-    int insertUser(@Param("user") ChatUser user);
+    int insertUser(ChatUser user);
 
     ChatUser findById(@Param("userId") String userId);
 

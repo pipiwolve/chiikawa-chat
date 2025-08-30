@@ -145,11 +145,13 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
                 }
 
-                case 100: // 私聊已读回执
+                // 私聊已读回执
+                case 100: {
                     ChatService.processReadAck(chatMessage.getMsgIds(), chatMessage.getFromUser(), channelContext);
                     break;
+                }
 
-
+                    // 私聊离线消息释放
                 case 211: {
                     String userId = chatMessage.getFromUser();   // 当前登录用户
                     String targetId = chatMessage.getToUser(); // 对方
@@ -170,13 +172,34 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
 
 
-
-                // 历史信息加载
+                // 历史信息分页加载
                 case 103: {
-                    List<ChatMessage> history = ChatGroupService.loadGroupHistory(chatMessage.getFromUser(), chatMessage.getGroupId(), chatMessage.getPageNum(), chatMessage.getPageSize());
+                    List<ChatMessage> history = ChatGroupService.loadGroupHistory(chatMessage.getFromUser(),
+                            chatMessage.getGroupId(),
+                            chatMessage.getPageNum(),
+                            chatMessage.getPageSize());
 
-                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(history), ChatServerConfig.CHARSET);
+                    history.forEach(m -> m.setType("group"));
+
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("cmd", 103);
+                    payload.put("data", history);
+
+                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(payload), ChatServerConfig.CHARSET);
                     Tio.sendToUser(channelContext.tioConfig, chatMessage.getFromUser(), resp);
+                    break;
+                }
+
+                case 104: { // 打开群聊窗口补发游标之后的消息
+                    String groupId = chatMessage.getGroupId();
+                    String userId = chatMessage.getFromUser();
+                    List<ChatMessage> toReplay = ChatGroupService.replayGroupHistoryForWindow(userId, groupId);
+                    toReplay.forEach(t -> t.setType("group"));
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("cmd", 104);
+                    payload.put("data", toReplay);
+                    WsResponse resp = WsResponse.fromText(JsonUtil.toJson(payload), ChatServerConfig.CHARSET);
+                    Tio.sendToUser(channelContext.tioConfig, userId, resp);
                     break;
                 }
 

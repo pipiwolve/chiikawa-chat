@@ -119,8 +119,8 @@ public class ChatGroupService {
     // 群组列表展示
     public static List<ChatGroup> getGroupsByUser(String userId) {
         try (SqlSession s = SQL_SESSION_FACTORY.openSession()) {
-            ChatGroupMapper mapper = s.getMapper(ChatGroupMapper.class);
-            return mapper.getUserGroupObjects(userId);
+            ChatGroupMapper groupMapper = s.getMapper(ChatGroupMapper.class);
+            return groupMapper.getUserGroupObjects(userId);
         }
     }
 
@@ -128,7 +128,10 @@ public class ChatGroupService {
      * 获取群成员
      */
     public List<String> getGroupMembers(String groupId) {
-        return chatGroupMapper.getGroupMembers(groupId);
+        try (SqlSession s = SQL_SESSION_FACTORY.openSession()) {
+            ChatGroupMapper groupMapper = s.getMapper(ChatGroupMapper.class);
+            return groupMapper.getGroupMembers(groupId);
+        }
     }
 
     /**
@@ -159,45 +162,38 @@ public class ChatGroupService {
      * 获取群已读游标
      */
     public String getLastReadCursor(String groupId, String userId) {
-        return chatGroupMapper.getLastReadCursor(groupId, userId);
+        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
+            ChatGroupMapper groupMapper = sqlSession.getMapper(ChatGroupMapper.class);
+            return groupMapper.getLastReadCursor(groupId, userId);
+        }
     }
-
 
     /**
      * 上线补发所有群的“游标之后”的历史消息（优先redis,不足回落db）
      */
-    public static void replayGroupHistoryOnLogin(String userId, ChannelContext ctx) {
-        if (userId == null) return;
-        List<String> groupIds = getUserGroupIds(userId);
-        if (groupIds == null || groupIds.isEmpty()) return;
+    public static List<ChatMessage> replayGroupHistoryForWindow(String userId, String groupId) {
+        if (userId == null || groupId == null) return Collections.emptyList();
 
-        for (String gid : groupIds) {
-            String lastCursor = R.get(groupCursorKey(gid, userId)); // msgId 或 null
+        // 获取用户在该群的最后已读游标
+        String lastCursor = R.get(groupCursorKey(groupId, userId));
+        List<ChatMessage> toReplay = new ArrayList<>();
 
-            // 1) 先从 Redis 最近消息中过滤 > cursor 的部分
-            List<String> raw = R.lrange(groupMsgKey(gid), 0, GROUP_RECENT_MAX - 1);
-            List<ChatMessage> recent = new ArrayList<>();
-            for (String s : raw) {
-                try {
-                    recent.add(JsonUtil.fromJson(s, ChatMessage.class));
-                } catch (Exception ignore) {
-                }
-            }
-            List<ChatMessage> toReplay = filterAfterCursor(recent, lastCursor);
-
-            // 2) 若不足且存在 cursor，则回落 DB 查询 cursor 之后的消息
-            if ((toReplay == null || toReplay.isEmpty()) && lastCursor != null) {
-                toReplay = fetchGroupHistorySince(gid, lastCursor, 200);
-            }
-
-            if (toReplay != null && !toReplay.isEmpty()) {
-                // 一次性批量推送（数组）
-                String payload = JsonUtil.toJson(toReplay);
-                WsResponse resp = WsResponse.fromText(payload, ChatServerConfig.CHARSET);
-                Tio.sendToUser(ctx.tioConfig, userId, resp);
-            }
+        // 1) 先从 Redis 最近消息中过滤 > cursor 的部分
+        List<String> raw = R.lrange(groupMsgKey(groupId), 0, GROUP_RECENT_MAX - 1);
+        List<ChatMessage> recent = new ArrayList<>();
+        for (String s : raw) {
+            try { recent.add(JsonUtil.fromJson(s, ChatMessage.class)); } catch (Exception ignore) {}
         }
+        toReplay = filterAfterCursor(recent, lastCursor);
+
+        // 2) Redis 不足，回落 DB
+        if ((toReplay == null || toReplay.isEmpty()) && lastCursor != null) {
+            toReplay = fetchGroupHistorySince(groupId, lastCursor, 200);
+        }
+
+        return toReplay != null ? toReplay : Collections.emptyList();
     }
+
     /**
      * 过滤出 msgId > cursor 的消息（如果 cursor 为 null，返回所有）
      */
@@ -263,7 +259,10 @@ public class ChatGroupService {
         String lastCursor = R.get(groupCursorKey(groupId, userId));
         Date cursorTime = null;
         if (lastCursor != null) {
-            cursorTime = chatGroupMapper.getCreateTimeByMsgId(lastCursor); // 根据 msgId 查询 create_time
+            try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
+                ChatGroupMapper groupMapper = sqlSession.getMapper(ChatGroupMapper.class);
+                cursorTime = groupMapper.getCreateTimeByMsgId(lastCursor);
+            }// 根据 msgId 查询 create_time
         } else {
             cursorTime = new Date(); // 默认最新时间
         }
@@ -274,8 +273,12 @@ public class ChatGroupService {
             // 分页查询
             PageHelper.startPage(pageNum, pageSize);
             List<ChatMessage> messages = mapper.selectGroupHistory(groupId, cursorTime);
-
-            return messages != null ? messages : Collections.emptyList();
+            if (messages != null) {
+                for (ChatMessage msg : messages) {
+                    msg.setType("group"); // 给每条消息设置 type 为 group
+                }
+            }
+            return messages;
         }
     }
 }

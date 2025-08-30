@@ -13,6 +13,8 @@ const msgStatusCallbacks = new Map();
 const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
 let activeTarget = null;
+let onReplayGroupHistory = null;
+
 
 export function connectSocket(userId, onMessage) {
     if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING) return;
@@ -20,7 +22,7 @@ export function connectSocket(userId, onMessage) {
     currentUserId = userId;
     connectStatus = CONNECT_STATUS.CONNECTING;
 
-    const wsUrl = `ws://192.168.110.238:9326`;
+    const wsUrl = `ws://192.168.1.10:9326`;
 
     try {
         socketTask = uni.connectSocket({
@@ -43,17 +45,21 @@ export function connectSocket(userId, onMessage) {
         flushQueue();
     });
 
-    socketTask.onMessage((res) => {
-        const dataStr = res.data;
+
+    socketTask.onMessage((msg) => {
+        console.log("[WS原始 res]", msg); // 打印整个事件对象
+        const dataStr = msg.data;
+        console.log("[WS解析后的 data]", dataStr);
+
         if (!dataStr || dataStr === 'null' || dataStr === 'undefined') return;
 
         try {
             const data = JSON.parse(dataStr);
+            console.log("[WS解析后的 data]", data);
 
-            // 🔹 分发给已注册的 cmd 回调
+            // 🔹 cmd处理
             if (data.cmd && cmdCallbacks[data.cmd]) {
                 cmdCallbacks[data.cmd](data);
-                return;
             }
 
             // 已读回执 101
@@ -64,12 +70,11 @@ export function connectSocket(userId, onMessage) {
                 return;
             }
 
-            // 批量群历史处理
-            if (Array.isArray(data) && data.length && (data[0].cmd === 3 || data[0].cmd === 103)) {
-                onGroupHistory && onGroupHistory(data);
-                return;
+            // 实时群消息
+            if (data && data.cmd === 3) {
+                cmdCallbacks[3]?.(data)
+                return
             }
-
             // 其他消息交由页面处理
             onMessage && onMessage(data);
         } catch (e) {
@@ -155,7 +160,7 @@ function sendData(data, onStatusChange) {
                 if (onStatusChange) onStatusChange('success');
                 msgStatusCallbacks.delete(data.msgId);
             },
-            fail(err) {
+            fail() {
                 messageQueue.push(data);
                 persistQueue();
                 if (onStatusChange) onStatusChange('failed');
@@ -176,7 +181,7 @@ export function sendCmdMessage(cmd, payload = {}) {
     sendData(data);
 }
 
-// 注册好友功能回调
+// cmd注册回调
 export function registerCmdHandler(cmd, callback) {
     cmdCallbacks[cmd] = callback;
 }
@@ -279,16 +284,21 @@ export function onGroupMessage(callback) {
     registerCmdHandler(3, callback);
 }
 
-export function sendReadAck(msgIds) {
-    if (!Array.isArray(msgIds) || msgIds.length === 0) return;
-    const ackData = { cmd: 100, fromUser: currentUserId, msgIds };
+export function sendReadAck(msgIds, peerId) {
+    if (!Array.isArray(msgIds) || msgIds.length === 0) return
+    if (!peerId) return
+    const ackData = { cmd: 100, fromUser: currentUserId, toUser: peerId, msgIds }
     if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
-        try { socketTask.send({ data: JSON.stringify(ackData) });
-            console.log("发送已读回执:", ackData)}
-        catch (e) { messageQueue.push(ackData); persistQueue(); }
+        try {
+            socketTask.send({ data: JSON.stringify(ackData) })
+            console.log("发送已读回执:", ackData)
+        } catch (e) {
+            messageQueue.push(ackData)
+            persistQueue()
+        }
     } else {
-        messageQueue.push(ackData);
-        persistQueue();
+        messageQueue.push(ackData)
+        persistQueue()
     }
 }
 
@@ -300,25 +310,41 @@ export function fetchOfflinePrivateMessages(toUser, onResult) {
     sendCmdMessage(cmd, payload);
 }
 
-export function sendGroupCursor(groupId, lastMsgId) {
-    if (!groupId) return;
-    const data = { cmd: 102, fromUser: currentUserId, groupId, msgId:lastMsgId, timestamp: Date.now() };
-    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
-        try { socketTask.send({ data: JSON.stringify(data) });}
-        catch (e) { console.error('[socket] sendGroupCursor error', e); }
-    }
+export function sendGroupHistoryRequest(groupId, pageNum, pageSize, cursorMsgId) {
+    sendCmdMessage(103, { groupId, pageNum, pageSize, cursorMsgId })
 }
 
-export function sendGroupHistoryRequest(groupId, pageNum, pageSize) {
-    if (!groupId) return;
-    const data = { cmd: 103, fromUser: currentUserId, groupId, pageNum, pageSize, timestamp: Date.now() };
-    if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
-        try { socketTask.send({ data: JSON.stringify(data) });}
-        catch (e) { console.error('[socket] sendGroupHistoryRequest error', e); }
-    }
+export function setGroupHistoryHandler(callback) {
+    onGroupHistory = callback;
+
+    // ⚡ 注册 cmd=103 回调
+    registerCmdHandler(103, (msg) => {
+        if (!msg || !Array.isArray(msg.data)) return;
+
+        // 给每条消息加 type='group'，确保 merge 时统一
+        const arr = msg.data.map(m => ({ ...m, type: 'group' }));
+        onGroupHistory && onGroupHistory(arr);
+    });
 }
 
-export function setGroupHistoryHandler(callback) { onGroupHistory = callback; }
+export function sendReplayGroupHistoryRequest(groupId) {
+    sendCmdMessage(104, { groupId });
+}
+export function setReplayGroupHistoryHandler(callback) {
+    onReplayGroupHistory = callback;
+
+    // 注册 cmd=104 回调，确保每条消息都加 type='group'
+    registerCmdHandler(104, (msg) => {
+        if (!msg) return;
+        const arr = msg.data || [];
+        if (!Array.isArray(arr)) return;
+        onReplayGroupHistory && onReplayGroupHistory(arr);
+    });
+}
+
+export function sendGroupCursor(groupId, msgId) {
+    sendCmdMessage(102, { groupId, msgId })
+}
 export function setReadAckHandler(callback) { onReadAck = callback; }
 export function setActiveTarget(targetId) { activeTarget = targetId; }
 export function closeSocket() {

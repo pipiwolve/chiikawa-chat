@@ -1,11 +1,8 @@
 <template>
   <view class="chat-container">
-    <!-- 右侧消息区 -->
     <view class="chat-right">
-      <!-- 顶部标题 -->
       <view class="chat-header">{{ currentTargetName }}</view>
 
-      <!-- 消息列表 -->
       <scroll-view
           scroll-y
           class="msg-list"
@@ -31,7 +28,6 @@
           <view class="msg-content">{{ item.content }}</view>
           <view class="msg-timestamp">{{ formatTimestamp(item.timestamp) }}</view>
 
-          <!-- 私聊状态 -->
           <view v-if="item.fromUser === userId && item.type === 'private'" class="msg-status">
             <text v-if="item.status === 'sending'">发送中...</text>
             <text v-else-if="item.status === 'failed'">
@@ -45,7 +41,6 @@
         <view v-if="loadingHistory" class="loading-tip">加载中...</view>
       </scroll-view>
 
-      <!-- 输入栏固定底部 -->
       <view class="chat-input-bar">
         <input v-model="inputMsg" placeholder="输入消息..." class="msg-input" />
         <button @click="sendMsg">发送</button>
@@ -59,25 +54,28 @@ import {
   connectSocket,
   sendMsg,
   sendGroupMsg,
-  isConnected,
-  closeSocket,
   setReadAckHandler,
   sendReadAck,
-  sendGroupCursor,
   setGroupHistoryHandler,
   sendGroupHistoryRequest,
   onPrivateMessage,
   onGroupMessage,
   unregisterCmdHandler,
-  fetchOfflinePrivateMessages
+  isConnected,
+  fetchOfflinePrivateMessages,
+  sendReplayGroupHistoryRequest,
+  sendGroupCursor,
+  setReplayGroupHistoryHandler
+
 } from '@/utils/socket.js'
 
 export default {
   data() {
     return {
-      messages: [],
-      groupMessages: {},
+      privateMessages: {},   // { targetId: [msg1, msg2, ...] }
+      groupMessages: {},     // { groupId: [msg1, msg2, ...] }
       inputMsg: '',
+      msgStatusMap:{},
       userId: '',
       targetId: '',
       targetType: '',
@@ -85,14 +83,23 @@ export default {
       currentTargetAvatar: '',
       connectionStatus: '未连接',
       scrollTop: 0,
-      msgStatusMap: {},
-      unreadMsgIdsBuffer: [],
-      unreadMsgIdsTimer: null,
-
       groupPageNum: 1,
       groupPageSize: 20,
       groupHasMore: true,
-      loadingHistory: false
+      loadingHistory: false,
+      unreadMsgIdsBuffer: [],
+      unreadMsgIdsTimer: null
+    }
+  },
+
+  computed: {
+    currentMessages() {
+      if (this.targetType === 'private') {
+        return this.privateMessages[this.targetId] || []
+      } else if (this.targetType === 'group') {
+        return this.groupMessages[this.targetId] || []
+      }
+      return []
     }
   },
 
@@ -104,54 +111,72 @@ export default {
     this.currentTargetName = options.name || ''
     this.currentTargetAvatar = options.avatar || ''
 
-    this.connectionStatus = '连接中...'
+    if (this.targetType === 'private') this.$set(this.privateMessages, this.targetId, [])
+    if (this.targetType === 'group') this.$set(this.groupMessages, this.targetId, [])
 
-    // 注册已读/群历史
+    // 注册已读回执 & 群历史回调
     setReadAckHandler(msgIds => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]))
+    // 注册回调
     setGroupHistoryHandler(arr => {
+      this.loadingHistory = false;
       if (!Array.isArray(arr) || arr.length === 0) {
-        this.groupHasMore = false
-        return
+        this.groupHasMore = false;
+        return;
       }
-      this.mergeGroupHistory(arr)
-    })
+      this.mergeGroupHistory(arr);
+      this.$nextTick(() => { this.scrollTop = 100000 });
+    });
 
+
+    setReplayGroupHistoryHandler(arr => {
+      if (!Array.isArray(arr) || arr.length === 0) return;
+      this.mergeGroupHistory(arr); // merge 到 groupMessages
+      this.$nextTick(() => { this.scrollTop = 100000 });
+    });
+
+
+
+    // 建立 socket
+    connectSocket(this.userId, msg => console.log('[WS] 收到消息:', msg))
+    onPrivateMessage(msg => this.handleSocketMessage(msg))
+    onGroupMessage(msg => this.handleSocketMessage(msg))
+
+    // 拉取私聊离线消息
     if (this.targetType === 'private') {
-      // 拉取私聊离线消息
       fetchOfflinePrivateMessages(this.targetId, (offlineMsgs) => {
         if (Array.isArray(offlineMsgs)) {
-          offlineMsgs.forEach(m => this.messages.push({...m, isOffline: true, status: 'success'}))
-          // 发送已读 ack 防抖
+          this.$set(this.privateMessages, this.targetId, offlineMsgs.map(m => ({ ...m, isOffline: true, status: 'success' })))
           const unreadIds = offlineMsgs.filter(m => m.fromUser === this.targetId).map(m => m.msgId)
-          if (unreadIds.length > 0) this.collectUnreadMsgIds(unreadIds)
+          if (unreadIds.length > 0) this.collectUnreadMsgIds(unreadIds, this.targetId)
           this.$nextTick(() => { this.scrollTop = 100000 })
         }
       })
     }
-
-    // 建立 socket
-    connectSocket(this.userId, msg => {
-      console.log("[WS] 收到消息:", msg)
-    })
-
-    onPrivateMessage(msg => this.handleSocketMessage(msg))
-    onGroupMessage(msg => this.handleSocketMessage(msg))
-
-
-
+    // 群聊初始化
     if (this.targetType === 'group') {
+      this.groupPageNum = 1
+      this.groupHasMore = true
+      this.loadingHistory = true
+      sendReplayGroupHistoryRequest(this.targetId)
+
       sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize)
     }
 
-    setInterval(() => {
+    this.connTimer = setInterval(() => {
       this.connectionStatus = isConnected() ? '已连接' : '未连接'
     }, 1000)
   },
 
   onUnload() {
-    unregisterCmdHandler(2) // 避免重复注册
+    unregisterCmdHandler(2)
     unregisterCmdHandler(3)
+    unregisterCmdHandler(103)
+    setGroupHistoryHandler(null)
+    clearInterval(this.connTimer)
+    unregisterCmdHandler(104)
+    setReplayGroupHistoryHandler(null)
   },
+
 
   methods: {
     /** 处理 socket 收到的消息 */
@@ -159,38 +184,47 @@ export default {
       console.log("进入 handleSocketMessage:", msg)
 
       // 私聊消息
-      if (msg.type === 'private' &&
-          ((msg.fromUser === this.targetId && msg.toUser === this.userId) ||
-              (msg.fromUser === this.userId && msg.toUser === this.targetId))) {
+      if (msg.type === 'private') {
+        const peerId = msg.fromUser === this.userId ? msg.toUser : msg.fromUser
 
-        const existingIdx = this.messages.findIndex(m => m.msgId === msg.msgId)
-        if (existingIdx !== -1) {
-          this.messages[existingIdx] = { ...this.messages[existingIdx], ...msg }
-        } else {
-          this.messages.push({ ...msg, isOffline: false, status: msg.status || 'success' })
+        // 初始化消息数组
+        if (!this.privateMessages[peerId]) this.$set(this.privateMessages, peerId, [])
+
+        // 去重
+        const exists = this.privateMessages[peerId].some(m => m.msgId === msg.msgId)
+        if (!exists) {
+          this.privateMessages[peerId].push({...msg, isOffline: false, status: msg.status || 'success'})
         }
 
-        // 收集未读回执
+        // 当前正在聊天的私聊窗口，滚动到底部
+        if (peerId === this.targetId) {
+          this.$nextTick(() => {
+            this.scrollTop = 100000
+          })
+        }
+
+        // ⚡ 收集未读 msgId，用于防抖发送已读回执
         if (msg.fromUser !== this.userId) {
-          this.collectUnreadMsgIds([msg.msgId])
+          this.collectUnreadMsgIds([msg.msgId], peerId)
         }
 
-        this.$nextTick(() => { this.scrollTop = 100000 })
         return
       }
 
-      // 群聊消息
       if (msg.type === 'group') {
         const gid = msg.groupId
-        if (!gid) return
         if (!this.groupMessages[gid]) this.$set(this.groupMessages, gid, [])
-        const exists = this.groupMessages[gid].some(m => m.msgId === msg.msgId)
-        if (!exists) this.groupMessages[gid].push({ ...msg, isOffline: false })
 
+        // 处理补发的消息和普通群消息一致
+        const existed = this.groupMessages[gid].some(m => m.msgId === msg.msgId)
+        if (!existed) {
+          this.groupMessages[gid].push({ ...msg, isOffline: false, type: 'group' })
+        }
+        // 如果当前就是打开窗口
         if (this.targetType === 'group' && this.targetId === gid) {
           this.$nextTick(() => {
             const last = this.groupMessages[gid][this.groupMessages[gid].length - 1]
-            this.debounceSendGroupCursor(gid, last?.msgId)
+            if (last?.msgId) this.debounceSendGroupCursor(gid, last.msgId)
             this.scrollTop = 100000
           })
         }
@@ -218,7 +252,8 @@ export default {
 
       if (this.targetType === 'private') {
         sendMsg(msg, onStatusChange)
-        this.messages.push(msg) // 本地立即显示
+        if (!this.privateMessages[this.targetId]) this.$set(this.privateMessages, this.targetId, [])
+        this.privateMessages[this.targetId].push(msg)
       } else {
         msg.groupId = this.targetId
         sendGroupMsg(msg, onStatusChange)
@@ -233,34 +268,44 @@ export default {
     /** 已读回执 */
     handleReadAck(msgIds) {
       msgIds.forEach(msgId => {
-        const msg = this.messages.find(m => m.msgId === msgId)
-        if (msg && msg.fromUser === this.userId && msg.status === 'success' && msg.type === 'private') {
-          msg.status = 'isRead'
-          this.msgStatusMap[msgId] = 'isRead'
+        for (const msgs of Object.values(this.privateMessages)) {
+          const msg = msgs.find(m => m.msgId === msgId)
+          if (msg && msg.fromUser === this.userId && msg.status === 'success' && msg.type === 'private') {
+            msg.status = 'isRead'
+            this.msgStatusMap[msgId] = 'isRead'
+          }
         }
       })
     },
 
     /** 收集未读消息 ID，延迟发送已读回执 */
-    collectUnreadMsgIds(ids) {
-      console.log("收集未读ID:", ids)
-      this.unreadMsgIdsBuffer.push(...ids)
-      if (this.unreadMsgIdsTimer) clearTimeout(this.unreadMsgIdsTimer)
-      this.unreadMsgIdsTimer = setTimeout(() => {
-        const uniqueIds = Array.from(new Set(this.unreadMsgIdsBuffer))
-        if (uniqueIds.length > 0) sendReadAck(uniqueIds)
-        this.unreadMsgIdsBuffer = []
-        this.unreadMsgIdsTimer = null
+    collectUnreadMsgIds(ids, peerId) {
+      if (!peerId) return
+      console.log("收集未读ID:", ids, "for peer:", peerId)
+      if (!this.unreadMsgIdsBufferMap) this.unreadMsgIdsBufferMap = {}
+      if (!this.unreadMsgIdsBufferMap[peerId]) this.unreadMsgIdsBufferMap[peerId] = []
+      this.unreadMsgIdsBufferMap[peerId].push(...ids)
+
+      if (this.unreadMsgIdsTimerMap && this.unreadMsgIdsTimerMap[peerId]) {
+        clearTimeout(this.unreadMsgIdsTimerMap[peerId])
+      } else if (!this.unreadMsgIdsTimerMap) {
+        this.unreadMsgIdsTimerMap = {}
+      }
+
+      this.unreadMsgIdsTimerMap[peerId] = setTimeout(() => {
+        const uniqueIds = Array.from(new Set(this.unreadMsgIdsBufferMap[peerId]))
+        if (uniqueIds.length > 0) sendReadAck(uniqueIds, peerId)
+        this.unreadMsgIdsBufferMap[peerId] = []
+        this.unreadMsgIdsTimerMap[peerId] = null
       }, 300)
     },
 
     /** 滚动加载群历史消息 */
     loadMoreMessages() {
-      if (this.targetType !== 'group' || !this.groupHasMore) return
-      const groupId = this.targetId
-      const pageNum = this.groupPageNum + 1
-      sendGroupHistoryRequest(groupId, pageNum, this.groupPageSize)
-      this.groupPageNum = pageNum
+      if (this.targetType !== 'group' || !this.groupHasMore || this.loadingHistory) return
+      this.loadingHistory = true
+      this.groupPageNum += 1
+      sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize)
     },
 
     /** 工具方法 */
@@ -295,14 +340,31 @@ export default {
 
     /** 合并群聊历史 */
     mergeGroupHistory(arr) {
+      console.log("[mergeGroupHistory] 进入, arr:", arr);
+      const gid = this.targetId;
+      if (!this.groupMessages[gid] || !Array.isArray(this.groupMessages[gid])) {
+        console.log("[mergeGroupHistory] 初始化 groupMessages[gid]");
+        this.$set(this.groupMessages, gid, []);
+      }
+
+      const existed = new Set(this.groupMessages[gid].map(m => m.msgId));
+      console.log("[mergeGroupHistory] 已有消息 ID:", existed);
+
       arr.forEach(m => {
-        if (!this.groupMessages[m.groupId]) this.$set(this.groupMessages, m.groupId, [])
-        this.groupMessages[m.groupId].unshift(m)
-      })
+        if (m && m.msgId && !existed.has(m.msgId)) {
+          console.log("[mergeGroupHistory] 插入新消息:", m);
+
+          this.groupMessages[gid].unshift(m); // type 已经在后端和 cmd=103 回调里加了
+        }else {
+          console.log("[mergeGroupHistory] 跳过重复或非法消息:", m);
+        }
+      });
+      console.log("[mergeGroupHistory] 最终 groupMessages[gid]:", this.groupMessages[gid]);
+      this.loadingHistory = false;
     },
 
     /** 防抖上报群游标 */
-    debounceSendGroupCursor: (function () {
+    debounceSendGroupCursor:(function () {
       let timer = null
       return function (gid, msgId) {
         if (timer) clearTimeout(timer)
@@ -313,19 +375,6 @@ export default {
       }
     })()
   },
-
-  computed: {
-    currentMessages() {
-      if (this.targetType === 'private') {
-        return this.messages.filter(m =>
-            (m.fromUser === this.targetId && m.toUser === this.userId) ||
-            (m.fromUser === this.userId && m.toUser === this.targetId)
-        )
-      } else {
-        return this.groupMessages[this.targetId] || []
-      }
-    }
-  }
 }
 </script>
 
