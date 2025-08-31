@@ -8,13 +8,12 @@ let messageQueue = [];
 const QUEUE_KEY = 'socket_message_queue';
 let onReadAck = null;
 let cmdCallbacks = {}; // 存放 cmd -> 回调
-
 const msgStatusCallbacks = new Map();
 const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
 let activeTarget = null;
 let onReplayGroupHistory = null;
-
+let onJoinGroup = null;
 
 export function connectSocket(userId, onMessage) {
     if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING) return;
@@ -22,7 +21,7 @@ export function connectSocket(userId, onMessage) {
     currentUserId = userId;
     connectStatus = CONNECT_STATUS.CONNECTING;
 
-    const wsUrl = `ws://192.168.1.10:9326`;
+    const wsUrl = `ws://192.168.110.238:9326`;
 
     try {
         socketTask = uni.connectSocket({
@@ -212,9 +211,27 @@ export function fetchSessions(onResult) {
     sendCmdMessage(200);
 }
 
-// 加入群聊
-export function joinGroup(groupId, role = "member") {
-    sendCmdMessage(201, { groupId, role });
+
+// 发送群聊申请请求
+export function sendJoinGroupRequest(groupId, userId) {
+    return new Promise((resolve, reject) => {
+        const msg = {
+            cmd: 214,
+            groupId,
+            fromUser: userId
+        };
+
+        try {
+            sendCmdMessage(214, msg, (res) => {
+                // 这里拿到后端回执
+                if (res) resolve(res);
+                else reject(new Error("No response from server"));
+            });
+            console.log("[sendJoinGroupRequest] 已发送加入群聊申请:", msg);
+        } catch (e) {
+            reject(e);
+        }
+    });
 }
 
 // 添加好友（发起申请）
@@ -233,6 +250,8 @@ export function fetchFriendRequests(onResult) {
     sendCmdMessage(209)
 }
 
+
+
 // 响应好友请求
 export function respondFriendRequest(requester, fromUser , action) {
     sendCmdMessage(206, { requester, fromUser, action});
@@ -250,6 +269,20 @@ export function fetchGroups(onResult) {
     sendCmdMessage(212);
 }
 
+export function setJoinGroupHandler(callback) {
+
+    onJoinGroup = callback
+    // 注册 cmd=208/210 回调
+    registerCmdHandler(214, (msg) => {
+        console.log("[214] 收到加入群申请通知:", msg);
+        onJoinGroup && onJoinGroup(msg);
+    });
+
+    registerCmdHandler(210, (msg) => {
+        console.log("[210] 群聊列表需要刷新:", msg);
+        onJoinGroup && onJoinGroup(msg);
+    });
+}
 
 
 // 发送私聊消息
@@ -274,6 +307,12 @@ export function sendGroupMsg(msg, onStatusChange) {
         console.error('发送群聊失败', e);
         onStatusChange && onStatusChange('failed');
     }
+}
+
+// 取群聊申请消息
+export function fetchGroupRequests() {
+    const userId = uni.getStorageSync("currentUserId") || '';
+    sendCmdMessage(215, { fromUser: userId })
 }
 
 export function onPrivateMessage(callback) {

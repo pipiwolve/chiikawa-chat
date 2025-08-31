@@ -13,6 +13,7 @@ if (!Math) {
   "./pages/create-group/create-group.js";
   "./pages/friends-request/friends-request.js";
   "./pages/groups/groups.js";
+  "./pages/group-requests/group-requests.js";
 }
 const _sfc_main = {
   onLaunch: function() {

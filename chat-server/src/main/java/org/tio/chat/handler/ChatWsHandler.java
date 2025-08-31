@@ -151,7 +151,7 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
                 }
 
-                    // 私聊离线消息释放
+                // 私聊离线消息释放
                 case 211: {
                     String userId = chatMessage.getFromUser();   // 当前登录用户
                     String targetId = chatMessage.getToUser(); // 对方
@@ -213,13 +213,100 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
                 }
 
-                //加入群组
-                case 201: {
-                    boolean ok = ChatGroupService.joinGroup(chatMessage.getGroupId(), chatMessage.getFromUser(), channelContext);
-                    Map<String,Object> resp201 = new HashMap<>();
-                    resp201.put("cmd", 201);
-                    resp201.put("result", ok ? "ok" : "fail");
-                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp201), CHARSET));
+              // 申请加入群聊
+                case 214: {
+                    String fromUser = chatMessage.getFromUser(); // 申请者
+                    String groupId = chatMessage.getGroupId();   // 申请的群
+                    String ownerId = ChatGroupService.findOwnerId(groupId); // 获取群主ID
+
+                    if (fromUser == null || ownerId == null || !fromUser.equals(channelContext.userid)) {
+                        sendFail(channelContext, 214, "unauthorized");
+                        break;
+                    }
+
+                    boolean inserted = GroupRequestService.createRequest(fromUser, groupId);
+
+                    // 构建回执给申请者
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("cmd", 214);
+                    resp.put("result", inserted ? "pending" : "fail");
+                    if (!inserted) resp.put("reason", "already_requested_or_member");
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), CHARSET));
+
+                    // 如果成功插入申请，通知群主（如果在线）
+                    if (inserted) {
+                        Map<String, Object> notify = new HashMap<>();
+                        notify.put("cmd", 214); // 加入群申请通知
+                        notify.put("fromUser", fromUser);
+                        notify.put("groupId", groupId);
+                        notify.put("result", "pending");
+                        notify.put("message", fromUser + " 申请加入群聊");
+                        notify.put("timestamp", System.currentTimeMillis());
+
+                        Tio.sendToUser(channelContext.tioConfig, ownerId,
+                                WsResponse.fromText(JsonUtil.toJson(notify), CHARSET));
+                    }
+                    break;
+                }
+
+                // 群主同意入群
+                case 210: {
+                    String ownerId = chatMessage.getFromUser(); // 群主
+                    String applicant = chatMessage.getApplicant(); // 申请人
+                    String groupId = chatMessage.getGroupId();
+
+                    if (ownerId == null || applicant == null || groupId == null || !ownerId.equals(channelContext.userid)) {
+                        sendFail(channelContext, 210, "unauthorized");
+                        break;
+                    }
+
+                    boolean ok = GroupRequestService.handleRequest(applicant, groupId, "accept");
+
+                    // 构建回执给群主
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("cmd", 210);
+                    resp.put("result", ok ? "ok" : "fail");
+                    resp.put("applicant", applicant);
+                    resp.put("groupId", groupId);
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), CHARSET));
+
+                    if (ok) {
+                        // 通知申请者入群成功
+                        Map<String, Object> notify = new HashMap<>();
+                        notify.put("cmd", 210);
+                        notify.put("result", "accepted");
+                        notify.put("groupId", groupId);
+                        notify.put("message", "你已成功加入群聊");
+                        notify.put("timestamp", System.currentTimeMillis());
+
+                        Tio.sendToUser(channelContext.tioConfig, applicant,
+                                WsResponse.fromText(JsonUtil.toJson(notify), CHARSET));
+
+                        // 通知群聊联系人页刷新群列表
+                        Map<String,Object> refreshNotify = new HashMap<>();
+                        refreshNotify.put("cmd", 210);
+                        refreshNotify.put("groupId", groupId);
+                        refreshNotify.put("message", "群聊列表已更新");
+                        Tio.sendToUser(channelContext.tioConfig, ownerId,
+                                WsResponse.fromText(JsonUtil.toJson(refreshNotify), CHARSET));
+                    }
+                    break;
+                }
+
+                case 215: { // 查询群聊申请
+                    String ownerId = chatMessage.getFromUser();
+                    if (!ownerId.equals(channelContext.userid)) {
+                        sendFail(channelContext, 215, "unauthorized");
+                        break;
+                    }
+
+                    List<GroupRequest> pendingRequests = GroupRequestService.getPendingRequests(ownerId);
+
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("cmd", 215);
+                    resp.put("requests", pendingRequests);
+
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), CHARSET));
                     break;
                 }
 

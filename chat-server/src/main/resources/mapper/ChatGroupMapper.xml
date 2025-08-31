@@ -10,6 +10,7 @@
         VALUES (#{g.groupId}, #{g.groupName}, #{g.ownerId}, #{g.avatar})
     </insert>
 
+    <!-- 删除群成员 -->
     <delete id="removeMember" parameterType="org.tio.chat.model.ChatGroupMember">
         DELETE FROM chat_group_member
         WHERE group_id = #{groupId}
@@ -130,6 +131,14 @@
     <!-- 查找用户是否已在群内 -->
     <select id="findMember" resultType="org.tio.chat.model.ChatGroupMember">
         SELECT * FROM chat_group_member WHERE group_id = #{groupId} AND user_id = #{userId}
+    </select>
+
+    <!-- 根据 groupId 查询群主 ID -->
+    <select id="findOwnerId" parameterType="string" resultType="string">
+        SELECT owner_id
+        FROM chat_group
+        WHERE group_id = #{groupId}
+        LIMIT 1
     </select>
 
 </mapper>

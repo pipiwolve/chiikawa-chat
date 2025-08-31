@@ -21,6 +21,7 @@
         <mapper resource="mapper/ChatGroupMapper.xml"/>
         <mapper resource="mapper/ChatUserMapper.xml"/>
         <mapper resource="mapper/FriendRequestMapper.xml"/>
+        <mapper resource="mapper/GroupRequestMapper.xml"/>
 
     </mappers>
 

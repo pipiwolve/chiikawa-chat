@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="org.tio.chat.mapper.GroupRequestMapper">
+
+    <!-- 检查是否已经是群成员 -->
+    <select id="isMember" resultType="int">
+        SELECT COUNT(*) FROM chat_group_member
+        WHERE user_id = #{userId} AND group_id = #{groupId}
+    </select>
+
+    <!-- 检查是否已有待处理申请 -->
+    <select id="existsPending" resultType="int">
+        SELECT COUNT(*) FROM group_request
+        WHERE user_id = #{userId} AND group_id = #{groupId} AND status = 'pending'
+    </select>
+
+    <!-- 插入申请 -->
+    <insert id="insertRequest">
+        INSERT INTO group_request(user_id, group_id, status, create_time)
+        VALUES(#{userId}, #{groupId}, 'pending', NOW())
+    </insert>
+
+    <!-- 更新申请状态 -->
+    <update id="updateStatus">
+        UPDATE group_request
+        SET status = #{status}
+        WHERE user_id = #{userId} AND group_id = #{groupId}
+    </update>
+
+    <!-- 查询群主待处理申请 -->
+    <select id="selectPendingByOwner" resultType="org.tio.chat.model.GroupRequest">
+        SELECT gm.user_id AS fromUser,
+               gm.group_id AS groupId,
+               gm.status,
+               gm.create_time AS createAt
+        FROM group_request gm
+                 JOIN chat_group g ON g.group_id = gm.group_id
+        WHERE g.owner_id = #{ownerId} AND gm.status = 'pending'
+    </select>
+</mapper>

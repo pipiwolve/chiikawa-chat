@@ -12,6 +12,11 @@
         <text class="label">加入群聊</text>
       </view>
 
+      <view class="function-item" @click="gotoGroupRequest">
+        <image class="icon" src="/static/icons/join-group.png"></image>
+        <text class="label">群聊用户申请</text>
+      </view>
+
     </view>
 
     <view v-if="groups.length === 0" class="empty">暂无群聊</view>
@@ -32,7 +37,7 @@
 </template>
 
 <script>
-import { fetchGroups, registerCmdHandler, unregisterCmdHandler } from '@/utils/socket.js'
+import { fetchGroups, registerCmdHandler, unregisterCmdHandler, setJoinGroupHandler } from '@/utils/socket.js'
 
 export default {
   data() {
@@ -58,10 +63,17 @@ export default {
       uni.$emit("refreshGroups")
     })
 
-    // 如果你定义了 "加入群成功" 的 cmd=201，也在这里处理
-    registerCmdHandler(201, () => {
-      uni.$emit("refreshGroups")
-    })
+    // 监听加入申请通知或同意
+    setJoinGroupHandler((msg) => {
+      if (msg.cmd === 214) {
+        uni.showToast({ title: `收到新加入群申请`, icon: "none" });
+        // 可选：显示在群聊申请列表
+      } else if (msg.cmd === 210) {
+        uni.showToast({ title: `群聊列表已更新`, icon: "success" });
+        uni.$emit("refreshGroups");
+      }
+    });
+
   },
   onUnload() {
     // 避免事件重复绑定
@@ -69,9 +81,11 @@ export default {
 
     // 注销 WebSocket 回调
     unregisterCmdHandler(212) // 群聊列表查询
-    unregisterCmdHandler(201) // 加群成功
     unregisterCmdHandler(203) // 创建群成功
     unregisterCmdHandler(204) // 被拉入群
+
+    unregisterCmdHandler(214);//发送好友申请
+    unregisterCmdHandler(210); //加入群聊成功
   },
   methods: {
     loadGroups() {
@@ -82,11 +96,15 @@ export default {
         }
       })
     },
+
     gotoCreateGroup(){
       uni.navigateTo({url: "/pages/create-group/create-group"})
     },
     gotoJoinGroup(){
       uni.navigateTo({url: "/pages/join-group/join-group"})
+    },
+    gotoGroupRequest(){
+      uni.navigateTo({url: "/pages/group-requests/group-requests"})
     }
   }
 }

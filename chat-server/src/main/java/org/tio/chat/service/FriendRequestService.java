@@ -4,7 +4,7 @@ import org.apache.ibatis.session.SqlSession;
 import org.tio.chat.mapper.FriendRequestMapper;
 import org.tio.chat.model.FriendRequest;
 
-import java.util.Date;
+
 import java.util.List;
 
 import static org.tio.chat.service.ChatService.SQL_SESSION_FACTORY;

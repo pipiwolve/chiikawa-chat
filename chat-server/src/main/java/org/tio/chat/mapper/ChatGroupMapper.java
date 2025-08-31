@@ -24,9 +24,7 @@ public interface ChatGroupMapper {
                       @Param("lastReadMsgId") String lastReadMsgId);
 
 
-    int addMember(@Param("groupId") String groupId,
-                     @Param("userId")  String userId,
-                     @Param("role")    String role);
+    int addMember(ChatGroupMember chatGroupMember);
 
 
     void removeMember(@Param("groupId") String groupId, @Param("userId")String userId);
@@ -136,4 +134,10 @@ public interface ChatGroupMapper {
     ChatGroupMember findMember(@Param("groupId") String groupId,
                                @Param("userId") String userId);
 
+    /**
+     *  查找管理员
+     * @param groupId
+     * @return
+     */
+    String findOwnerId(@Param("groupId") String groupId);
 }

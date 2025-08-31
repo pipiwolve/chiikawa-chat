@@ -10,7 +10,8 @@
     "pages/join-group/join-group",
     "pages/create-group/create-group",
     "pages/friends-request/friends-request",
-    "pages/groups/groups"
+    "pages/groups/groups",
+    "pages/group-requests/group-requests"
   ],
   "window": {
     "navigationBarTextStyle": "black",

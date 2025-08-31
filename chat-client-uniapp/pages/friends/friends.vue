@@ -45,7 +45,10 @@ export default {
     uni.$on("refreshFriends", this.loadFriends)
 
     registerCmdHandler(207, (data) => {
-      uni.showToast({title: `你和 ${data.friendId} 已成为好友`, icon: "success"})
+      // 只有非自己发起的通知才显示 Toast
+      if (data.friendId !== this.userId) {
+        uni.showToast({title: `你和 ${data.friendId} 已成为好友`, icon: "success"})
+      }
       uni.$emit("refreshFriends")
     })
   },

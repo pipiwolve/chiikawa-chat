@@ -13,7 +13,9 @@ const _sfc_main = {
     this.loadFriends();
     common_vendor.index.$on("refreshFriends", this.loadFriends);
     utils_socket.registerCmdHandler(207, (data) => {
-      common_vendor.index.showToast({ title: `你和 ${data.friendId} 已成为好友`, icon: "success" });
+      if (data.friendId !== this.userId) {
+        common_vendor.index.showToast({ title: `你和 ${data.friendId} 已成为好友`, icon: "success" });
+      }
       common_vendor.index.$emit("refreshFriends");
     });
   },
@@ -25,7 +27,7 @@ const _sfc_main = {
   methods: {
     loadFriends() {
       utils_socket.fetchFriends((res) => {
-        common_vendor.index.__f__("log", "at pages/friends/friends.vue:66", "[Friends] 收到好友列表:", res);
+        common_vendor.index.__f__("log", "at pages/friends/friends.vue:69", "[Friends] 收到好友列表:", res);
         if (res.friends) {
           this.friends = res.friends;
         }

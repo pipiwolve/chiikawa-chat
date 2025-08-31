@@ -31,6 +31,7 @@ public class ChatMessage implements Serializable {
     private String toUser;
     private String nickname;
 
+    private String applicant;
     @JsonAlias({ "text", "message", "msg", "sysMsg" })
     private String content;
 

@@ -20,21 +20,27 @@ const _sfc_main = {
       common_vendor.index.showToast({ title: `你已加入群聊 ${data.groupName}`, icon: "success" });
       common_vendor.index.$emit("refreshGroups");
     });
-    utils_socket.registerCmdHandler(201, () => {
-      common_vendor.index.$emit("refreshGroups");
+    utils_socket.setJoinGroupHandler((msg) => {
+      if (msg.cmd === 214) {
+        common_vendor.index.showToast({ title: `收到新加入群申请`, icon: "none" });
+      } else if (msg.cmd === 210) {
+        common_vendor.index.showToast({ title: `群聊列表已更新`, icon: "success" });
+        common_vendor.index.$emit("refreshGroups");
+      }
     });
   },
   onUnload() {
     common_vendor.index.$off("refreshGroups", this.loadGroups);
     utils_socket.unregisterCmdHandler(212);
-    utils_socket.unregisterCmdHandler(201);
     utils_socket.unregisterCmdHandler(203);
     utils_socket.unregisterCmdHandler(204);
+    utils_socket.unregisterCmdHandler(214);
+    utils_socket.unregisterCmdHandler(210);
   },
   methods: {
     loadGroups() {
       utils_socket.fetchGroups((res) => {
-        common_vendor.index.__f__("log", "at pages/groups/groups.vue:79", "[Groups] 收到群聊列表:", res);
+        common_vendor.index.__f__("log", "at pages/groups/groups.vue:93", "[Groups] 收到群聊列表:", res);
         if (res.groups) {
           this.groups = res.groups;
         }
@@ -45,6 +51,9 @@ const _sfc_main = {
     },
     gotoJoinGroup() {
       common_vendor.index.navigateTo({ url: "/pages/join-group/join-group" });
+    },
+    gotoGroupRequest() {
+      common_vendor.index.navigateTo({ url: "/pages/group-requests/group-requests" });
     }
   }
 };
@@ -54,9 +63,11 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
     b: common_vendor.o((...args) => $options.gotoCreateGroup && $options.gotoCreateGroup(...args)),
     c: common_assets._imports_1$1,
     d: common_vendor.o((...args) => $options.gotoJoinGroup && $options.gotoJoinGroup(...args)),
-    e: $data.groups.length === 0
+    e: common_assets._imports_1$1,
+    f: common_vendor.o((...args) => $options.gotoGroupRequest && $options.gotoGroupRequest(...args)),
+    g: $data.groups.length === 0
   }, $data.groups.length === 0 ? {} : {}, {
-    f: common_vendor.f($data.groups, (g, idx, i0) => {
+    h: common_vendor.f($data.groups, (g, idx, i0) => {
       return {
         a: g.avatar || $data.defaultGroupAvatar,
         b: common_vendor.t(g.groupName),

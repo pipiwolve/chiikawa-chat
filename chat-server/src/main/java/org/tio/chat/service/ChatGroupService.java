@@ -30,6 +30,27 @@ public class ChatGroupService {
     }
 
 
+    // 查找群主 ID
+    public static String findOwnerId(String groupId) {
+        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
+            ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
+            return mapper.findOwnerId(groupId);
+        }
+    }
+
+    // 添加群成员
+    public static boolean addMember(String groupId, String userId, String role) {
+        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
+            ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
+            ChatGroupMember member = new ChatGroupMember();
+            member.setUserId(userId);
+            member.setGroupId(groupId);
+            member.setRole("member");
+            return mapper.addMember(member) > 0;
+        }
+    }
+
+
     /**
      * 创建群
      * @param ownerId
@@ -67,7 +88,11 @@ public class ChatGroupService {
 
             for (String uid : members) {
                  String role = ownerId.equals(uid) ? "owner" : "member";
-                 mapper.addMember(groupId, uid, role);
+                ChatGroupMember member = new ChatGroupMember();
+                member.setUserId(uid);
+                member.setGroupId(groupId);
+                member.setRole("member");
+                 mapper.addMember(member);
             }
 
             // 查询回填
@@ -95,7 +120,12 @@ public class ChatGroupService {
             ChatGroupMember existing = mapper.findMember(groupId, userId);
             if (existing == null) {
                 String role = "member";
-                mapper.addMember(groupId, userId, role);
+
+                ChatGroupMember member = new ChatGroupMember();
+                member.setUserId(userId);
+                member.setGroupId(groupId);
+                member.setRole("member");
+                mapper.addMember(member);
                 // tio 层绑定群
                 Tio.bindGroup(ctx, groupId);
                 log.info("用户 [{}] 以角色 [{}] 加入群 [{}]", userId, role, groupId);

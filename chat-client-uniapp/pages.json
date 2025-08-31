@@ -65,7 +65,14 @@
 			"style": {
 				"navigationBarTitleText": "群聊联系人"
 			}
+		},
+		{
+			"path": "pages/group-requests/group-requests",
+			"style": {
+				"navigationBarTitleText": "群聊申请处理"
+			}
 		}
+
 	],
 
 	"globalStyle": {
