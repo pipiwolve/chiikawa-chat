@@ -54,6 +54,16 @@ const _sfc_main = {
     },
     gotoGroupRequest() {
       common_vendor.index.navigateTo({ url: "/pages/group-requests/group-requests" });
+    },
+    // 点击会话进入聊天
+    connect(item) {
+      let query = "";
+      if (item.groupId) {
+        query = `?targetId=${item.groupId}&type=group`;
+        common_vendor.index.navigateTo({
+          url: "/pages/chat/chat" + query
+        });
+      }
     }
   }
 };
@@ -67,12 +77,12 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
     f: common_vendor.o((...args) => $options.gotoGroupRequest && $options.gotoGroupRequest(...args)),
     g: $data.groups.length === 0
   }, $data.groups.length === 0 ? {} : {}, {
-    h: common_vendor.f($data.groups, (g, idx, i0) => {
+    h: common_vendor.f($data.groups, (item, idx, i0) => {
       return {
-        a: g.avatar || $data.defaultGroupAvatar,
-        b: common_vendor.t(g.groupName),
+        a: item.avatar || $data.defaultGroupAvatar,
+        b: common_vendor.t(item.groupName),
         c: idx,
-        d: common_vendor.o(($event) => _ctx.openGroup(g), idx)
+        d: common_vendor.o(($event) => $options.connect(item), idx)
       };
     })
   });

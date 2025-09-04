@@ -57,6 +57,12 @@ export default {
     registerCmdHandler(203, () => this.loadSessions()) // 创建群成功
     registerCmdHandler(204, () => this.loadSessions()) // 被拉入群
 
+    // 消息显示回调
+    registerCmdHandler(2, () => this.loadSessions())
+    registerCmdHandler(3, () => this.loadSessions())
+
+    // ✅ 监听发送方主动触发的刷新
+    uni.$on('refreshSessions', this.loadSessions)
     // 全局刷新事件订阅
     uni.$on('refreshFriends', this.loadSessions)
     uni.$on('refreshGroups', this.loadSessions)
@@ -66,6 +72,7 @@ export default {
     // 避免重复绑定
     uni.$off('refreshFriends', this.loadSessions)
     uni.$off('refreshGroups', this.loadSessions)
+    uni.$off('refreshSessions', this.loadSessions)
 
     // 注销 WebSocket 回调
     unregisterCmdHandler(205)
@@ -73,6 +80,8 @@ export default {
     unregisterCmdHandler(201)
     unregisterCmdHandler(203)
     unregisterCmdHandler(204)
+    unregisterCmdHandler(2)
+    unregisterCmdHandler(3)
   },
 
   methods: {
@@ -97,8 +106,21 @@ export default {
     // 格式化时间
     formatTime(ts) {
       if (!ts) return ''
-      const d = new Date(ts)
-      return `${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`
+
+      let dateObj
+      if (typeof ts === 'string') {
+        // 替换空格为 T，或者替换 - 为 /
+        const normalized = ts.replace(/-/g, '/').replace(' ', 'T')
+        dateObj = new Date(normalized)
+      } else {
+        dateObj = new Date(ts)
+      }
+
+      if (isNaN(dateObj.getTime())) return '' // 避免 NaN
+
+      const hours = dateObj.getHours().toString().padStart(2, '0')
+      const minutes = dateObj.getMinutes().toString().padStart(2, '0')
+      return `${hours}:${minutes}`
     }
   }
 }

@@ -22,14 +22,14 @@
     <view v-if="groups.length === 0" class="empty">暂无群聊</view>
 
     <view
-        v-for="(g, idx) in groups"
+        v-for="(item, idx) in groups"
         :key="idx"
         class="list-item"
-        @click="openGroup(g)"
+        @click="connect(item)"
     >
-      <image class="avatar" :src="g.avatar || defaultGroupAvatar"></image>
+      <image class="avatar" :src="item.avatar || defaultGroupAvatar"></image>
       <view class="content">
-        <text class="name">{{ g.groupName }}</text>
+        <text class="name">{{ item.groupName }}</text>
       </view>
 
     </view>
@@ -105,6 +105,16 @@ export default {
     },
     gotoGroupRequest(){
       uni.navigateTo({url: "/pages/group-requests/group-requests"})
+    },
+    // 点击会话进入聊天
+    connect(item) {
+      let query = ''
+      if (item.groupId) {
+        query = `?targetId=${item.groupId}&type=group`
+        uni.navigateTo({
+          url: '/pages/chat/chat' + query
+        })
+      }
     }
   }
 }

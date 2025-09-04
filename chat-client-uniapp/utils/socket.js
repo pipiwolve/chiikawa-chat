@@ -21,7 +21,7 @@ export function connectSocket(userId, onMessage) {
     currentUserId = userId;
     connectStatus = CONNECT_STATUS.CONNECTING;
 
-    const wsUrl = `ws://192.168.110.238:9326`;
+    const wsUrl = `ws://172.20.10.13:9326`;
 
     try {
         socketTask = uni.connectSocket({

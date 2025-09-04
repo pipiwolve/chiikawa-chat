@@ -86,8 +86,7 @@ public class ChatGroupService {
                 }
             }
 
-            for (String uid : members) {
-                 String role = ownerId.equals(uid) ? "owner" : "member";
+            for (String uid : members)  {
                 ChatGroupMember member = new ChatGroupMember();
                 member.setUserId(uid);
                 member.setGroupId(groupId);
@@ -106,36 +105,6 @@ public class ChatGroupService {
 
             return out;
         }
-    }
-    /**
-     * 用户加入群聊
-     *
-     * @return
-     */
-    public static boolean joinGroup(String groupId, String userId, ChannelContext ctx) {
-        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
-            ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
-
-            // 检查用户是否已在群里
-            ChatGroupMember existing = mapper.findMember(groupId, userId);
-            if (existing == null) {
-                String role = "member";
-
-                ChatGroupMember member = new ChatGroupMember();
-                member.setUserId(userId);
-                member.setGroupId(groupId);
-                member.setRole("member");
-                mapper.addMember(member);
-                // tio 层绑定群
-                Tio.bindGroup(ctx, groupId);
-                log.info("用户 [{}] 以角色 [{}] 加入群 [{}]", userId, role, groupId);
-                return true;
-            } else {
-                log.info("用户 [{}] 已在群 [{}] 中，无需重复加入", userId, groupId);
-                return false;
-            }
-        }
-
     }
 
     public static void leaveGroup(String groupId, String userId, ChannelContext ctx) {

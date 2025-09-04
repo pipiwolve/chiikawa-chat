@@ -111,8 +111,10 @@ export default {
     this.currentTargetName = options.name || ''
     this.currentTargetAvatar = options.avatar || ''
 
+
     if (this.targetType === 'private') this.$set(this.privateMessages, this.targetId, [])
     if (this.targetType === 'group') this.$set(this.groupMessages, this.targetId, [])
+
 
     // 注册已读回执 & 群历史回调
     setReadAckHandler(msgIds => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]))
@@ -168,6 +170,12 @@ export default {
   },
 
   onUnload() {
+    // 离开聊天页面时，清除当前会话的未读
+    uni.$emit("clearUnread", {
+      sessionId: this.targetId,
+      type: this.targetType
+    })
+
     unregisterCmdHandler(2)
     unregisterCmdHandler(3)
     unregisterCmdHandler(103)
@@ -208,6 +216,8 @@ export default {
           this.collectUnreadMsgIds([msg.msgId], peerId)
         }
 
+        uni.$emit("refreshSessions")
+
         return
       }
 
@@ -228,6 +238,10 @@ export default {
             this.scrollTop = 100000
           })
         }
+
+        uni.$emit("refreshSessions")
+
+        return
       }
     },
 
@@ -263,6 +277,9 @@ export default {
 
       this.inputMsg = ''
       this.$nextTick(() => { this.scrollTop = 100000 })
+
+      // ✅ 主动刷新消息中心会话列表
+      uni.$emit("refreshSessions")
     },
 
     /** 已读回执 */

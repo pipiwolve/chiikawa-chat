@@ -25,23 +25,29 @@ const _sfc_main = {
     utils_socket.registerCmdHandler(201, () => this.loadSessions());
     utils_socket.registerCmdHandler(203, () => this.loadSessions());
     utils_socket.registerCmdHandler(204, () => this.loadSessions());
+    utils_socket.registerCmdHandler(2, () => this.loadSessions());
+    utils_socket.registerCmdHandler(3, () => this.loadSessions());
+    common_vendor.index.$on("refreshSessions", this.loadSessions);
     common_vendor.index.$on("refreshFriends", this.loadSessions);
     common_vendor.index.$on("refreshGroups", this.loadSessions);
   },
   onUnload() {
     common_vendor.index.$off("refreshFriends", this.loadSessions);
     common_vendor.index.$off("refreshGroups", this.loadSessions);
+    common_vendor.index.$off("refreshSessions", this.loadSessions);
     utils_socket.unregisterCmdHandler(205);
     utils_socket.unregisterCmdHandler(207);
     utils_socket.unregisterCmdHandler(201);
     utils_socket.unregisterCmdHandler(203);
     utils_socket.unregisterCmdHandler(204);
+    utils_socket.unregisterCmdHandler(2);
+    utils_socket.unregisterCmdHandler(3);
   },
   methods: {
     // 获取最近会话（cmd=200）
     loadSessions() {
       utils_socket.fetchSessions((resp) => {
-        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:82", "[Sessions] 最近会话:", resp.sessions);
+        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:91", "[Sessions] 最近会话:", resp.sessions);
         this.users = (resp.sessions || []).map((s) => ({
           ...s,
           // 标记未读：未读消息或存在待处理好友请求
@@ -60,8 +66,18 @@ const _sfc_main = {
     formatTime(ts) {
       if (!ts)
         return "";
-      const d = new Date(ts);
-      return `${d.getHours()}:${d.getMinutes().toString().padStart(2, "0")}`;
+      let dateObj;
+      if (typeof ts === "string") {
+        const normalized = ts.replace(/-/g, "/").replace(" ", "T");
+        dateObj = new Date(normalized);
+      } else {
+        dateObj = new Date(ts);
+      }
+      if (isNaN(dateObj.getTime()))
+        return "";
+      const hours = dateObj.getHours().toString().padStart(2, "0");
+      const minutes = dateObj.getMinutes().toString().padStart(2, "0");
+      return `${hours}:${minutes}`;
     }
   }
 };
