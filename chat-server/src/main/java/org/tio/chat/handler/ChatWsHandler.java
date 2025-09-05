@@ -151,6 +151,34 @@ public class ChatWsHandler implements IWsMsgHandler {
                     break;
                 }
 
+                case 105: {
+                    String userId = chatMessage.getFromUser(); // 请求方
+                    String peerId = chatMessage.getPeerId();   // 约定字段名为 peerId
+                    Integer pageNum = chatMessage.getPageNum();
+                    Integer pageSize = chatMessage.getPageSize();
+
+                    if (userId == null || !userId.equals(channelContext.userid) || peerId == null) {
+                        sendFail(channelContext, 105, "unauthorized");
+                        break;
+                    }
+
+                    List<ChatMessage> history = ChatService.loadPrivateHistory(userId, peerId, pageNum, pageSize);
+                    for (ChatMessage m : history) {
+                         m.setType("private"); // 如果 ChatMessage 有 type 字段
+                    }
+
+                    // 把结果包装成 {cmd:105, data: [..]}
+                    Map<String, Object> resp = new HashMap<>();
+                    resp.put("cmd", 105);
+                    resp.put("data", history);
+                    Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(resp), ChatServerConfig.CHARSET));
+
+                    // 标记该 userId 对 peerId 的离线消息为已投递（避免重复推送）
+                    ChatService.markOfflineMessagesDelivered(userId, peerId);
+
+                    break;
+                }
+
                 // 私聊离线消息释放
                 case 211: {
                     String userId = chatMessage.getFromUser();   // 当前登录用户

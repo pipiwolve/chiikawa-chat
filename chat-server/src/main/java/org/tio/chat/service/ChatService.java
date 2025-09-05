@@ -1,5 +1,6 @@
 package org.tio.chat.service;
 
+import com.github.pagehelper.PageHelper;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
@@ -211,6 +212,21 @@ public class ChatService {
         R.del(readAckKey(userId, peerId));
     }
 
+    public static List<ChatMessage> loadPrivateHistory(String userId, String peerId, Integer pageNum, Integer pageSize) {
+        if (userId == null || peerId == null) return Collections.emptyList();
+        pageNum = pageNum != null ? pageNum : 1;
+        pageSize = pageSize != null ? pageSize : 20;
+
+        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession()) {
+            ChatMessageMapper mapper = sqlSession.getMapper(ChatMessageMapper.class);
+            // 如果使用 PageHelper：
+            PageHelper.startPage(pageNum, pageSize);
+            List<ChatMessage> messages = mapper.selectPrivateHistory(userId, peerId);
+            if (messages == null) return Collections.emptyList();
+            return messages;
+        }
+    }
+
     // -------------------- 处理已读确认 -> 生成回执 --------------------
     public static void processReadAck(List<String> msgIds, String readerId, ChannelContext ctx) {
         if (readerId == null || msgIds == null || msgIds.isEmpty()) return;
@@ -225,6 +241,25 @@ public class ChatService {
                 String sender = oe.msg.getFromUser();
                 if (sender != null) {
                     ackBySender.computeIfAbsent(sender, k -> new ArrayList<>()).add(mid);
+                }
+            }
+        }
+
+        // 2. 数据库更新 is_read 字段
+        try (SqlSession session = SQL_SESSION_FACTORY.openSession(true)) {
+            ChatMessageMapper mapper = session.getMapper(ChatMessageMapper.class);
+
+            // 更新这些消息为已读（限定 to_user = readerId）
+            mapper.markReadByMsgIds(msgIds, readerId);
+
+            // 如果 onlineMap 没找到某些消息，也要从 DB 查发送者
+            List<ChatMessage> rows = mapper.selectFromByMsgIds(msgIds, readerId);
+            if (rows != null) {
+                for (ChatMessage r : rows) {
+                    String sender = r.getFromUser();
+                    if (sender != null) {
+                        ackBySender.computeIfAbsent(sender, k -> new ArrayList<>()).add(r.getMsgId());
+                    }
                 }
             }
         }

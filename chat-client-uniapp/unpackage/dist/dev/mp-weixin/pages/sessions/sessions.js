@@ -22,6 +22,9 @@ const _sfc_main = {
       common_vendor.index.$emit("refreshFriends");
       this.loadSessions();
     });
+    utils_socket.registerCmdHandler(101, (data) => {
+      this.loadSessions();
+    });
     utils_socket.registerCmdHandler(201, () => this.loadSessions());
     utils_socket.registerCmdHandler(203, () => this.loadSessions());
     utils_socket.registerCmdHandler(204, () => this.loadSessions());
@@ -40,6 +43,7 @@ const _sfc_main = {
     utils_socket.unregisterCmdHandler(201);
     utils_socket.unregisterCmdHandler(203);
     utils_socket.unregisterCmdHandler(204);
+    utils_socket.unregisterCmdHandler(101);
     utils_socket.unregisterCmdHandler(2);
     utils_socket.unregisterCmdHandler(3);
   },
@@ -47,7 +51,7 @@ const _sfc_main = {
     // 获取最近会话（cmd=200）
     loadSessions() {
       utils_socket.fetchSessions((resp) => {
-        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:91", "[Sessions] 最近会话:", resp.sessions);
+        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:98", "[Sessions] 最近会话:", resp.sessions);
         this.users = (resp.sessions || []).map((s) => ({
           ...s,
           // 标记未读：未读消息或存在待处理好友请求

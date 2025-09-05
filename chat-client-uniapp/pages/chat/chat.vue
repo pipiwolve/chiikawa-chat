@@ -65,7 +65,10 @@ import {
   fetchOfflinePrivateMessages,
   sendReplayGroupHistoryRequest,
   sendGroupCursor,
-  setReplayGroupHistoryHandler
+  setReplayGroupHistoryHandler,
+  setPrivateHistoryHandler,
+  sendPrivateHistoryRequest
+
 
 } from '@/utils/socket.js'
 
@@ -88,7 +91,11 @@ export default {
       groupHasMore: true,
       loadingHistory: false,
       unreadMsgIdsBuffer: [],
-      unreadMsgIdsTimer: null
+      unreadMsgIdsTimer: null,
+      privatePageNum: 1,
+      privatePageSize: 50,
+      privateHasMore: true,
+      loadingPrivateHistory: false
     }
   },
 
@@ -116,8 +123,6 @@ export default {
     if (this.targetType === 'group') this.$set(this.groupMessages, this.targetId, [])
 
 
-    // 注册已读回执 & 群历史回调
-    setReadAckHandler(msgIds => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]))
     // 注册回调
     setGroupHistoryHandler(arr => {
       this.loadingHistory = false;
@@ -136,6 +141,27 @@ export default {
       this.$nextTick(() => { this.scrollTop = 100000 });
     });
 
+    // 注册私聊历史回调
+    setPrivateHistoryHandler((arr) => {
+      this.loadingPrivateHistory = false;
+      if (!Array.isArray(arr) || arr.length === 0) {
+        // 如果是第一页返回空，说明没有更多历史
+        if (this.privatePageNum === 1) this.privateHasMore = false;
+        return;
+      }
+      // 将历史合并到 privateMessages[this.targetId]
+      this.mergePrivateHistory(arr);
+
+      // 收到历史后：如果有来自对方的未读消息，收集并防抖发送已读 ack
+      const peerId = this.targetId;
+      const unreadIds = arr.filter(m => m.fromUser === peerId && !m.isRead).map(m => m.msgId);
+      if (unreadIds.length > 0) this.collectUnreadMsgIds(unreadIds, peerId);
+
+      this.$nextTick(() => { this.scrollTop = 100000 });
+    });
+
+    // 注册已读回执 & 群历史回调
+    setReadAckHandler(msgIds => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]))
 
 
     // 建立 socket
@@ -145,15 +171,48 @@ export default {
 
     // 拉取私聊离线消息
     if (this.targetType === 'private') {
-      fetchOfflinePrivateMessages(this.targetId, (offlineMsgs) => {
-        if (Array.isArray(offlineMsgs)) {
-          this.$set(this.privateMessages, this.targetId, offlineMsgs.map(m => ({ ...m, isOffline: true, status: 'success' })))
-          const unreadIds = offlineMsgs.filter(m => m.fromUser === this.targetId).map(m => m.msgId)
-          if (unreadIds.length > 0) this.collectUnreadMsgIds(unreadIds, this.targetId)
-          this.$nextTick(() => { this.scrollTop = 100000 })
-        }
-      })
+      this.privatePageNum = 1;
+      this.privateHasMore = true;
+      this.loadingPrivateHistory = true;
+      sendPrivateHistoryRequest(this.targetId, this.privatePageNum, this.privatePageSize);
+
+      // 确保离线释放消息在历史就消息后
+      setTimeout(() => {
+        fetchOfflinePrivateMessages(this.targetId, (offlineMsgs) => {
+          if (Array.isArray(offlineMsgs) && offlineMsgs.length > 0) {
+            // 1. 确保已有数组（历史消息）
+            if (!this.privateMessages[this.targetId]) {
+              this.$set(this.privateMessages, this.targetId, []);
+            }
+
+            // 2. 先按时间排序（旧 → 新）
+            offlineMsgs.sort((a, b) => a.timestamp - b.timestamp);
+
+            // 3. 逐条 append（push）到已有数组（保证离线消息在底部）
+            offlineMsgs.forEach(m => {
+              this.privateMessages[this.targetId].push({
+                ...m,
+                isOffline: true,
+                status: 'success'
+              });
+            });
+
+            // 4. 收集未读（只针对对方发来的）
+            const unreadIds = offlineMsgs
+                .filter(m => m.fromUser === this.targetId)
+                .map(m => m.msgId);
+
+            if (unreadIds.length > 0) this.collectUnreadMsgIds(unreadIds, this.targetId);
+
+            this.$nextTick(() => {
+              this.scrollTop = 100000;
+            });
+          }
+        })
+      }, 200)
+
     }
+
     // 群聊初始化
     if (this.targetType === 'group') {
       this.groupPageNum = 1
@@ -179,7 +238,9 @@ export default {
     unregisterCmdHandler(2)
     unregisterCmdHandler(3)
     unregisterCmdHandler(103)
+    unregisterCmdHandler(105)
     setGroupHistoryHandler(null)
+    setPrivateHistoryHandler && setPrivateHistoryHandler(null)
     clearInterval(this.connTimer)
     unregisterCmdHandler(104)
     setReplayGroupHistoryHandler(null)
@@ -317,13 +378,26 @@ export default {
       }, 300)
     },
 
-    /** 滚动加载群历史消息 */
+    // 滚动加载私聊（在 scroll 至顶触发）
     loadMoreMessages() {
-      if (this.targetType !== 'group' || !this.groupHasMore || this.loadingHistory) return
-      this.loadingHistory = true
-      this.groupPageNum += 1
-      sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize)
+      // 如果是群聊逻辑已有实现，扩展支持私聊
+      if (this.targetType === 'group') {
+        if (!this.groupHasMore || this.loadingHistory) return;
+        this.loadingHistory = true;
+        this.groupPageNum += 1;
+        sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize);
+        return;
+      }
+
+      if (this.targetType === 'private') {
+        if (!this.privateHasMore || this.loadingPrivateHistory) return;
+        this.loadingPrivateHistory = true;
+        this.privatePageNum += 1;
+        sendPrivateHistoryRequest(this.targetId, this.privatePageNum, this.privatePageSize);
+        return;
+      }
     },
+
 
     /** 工具方法 */
     disconnect() { closeSocket() },
@@ -353,6 +427,46 @@ export default {
       msg.status = 'sending'
       if (msg.type === 'private') sendMsg(msg)
       else sendGroupMsg(msg)
+    },
+
+    /** 合并私聊历史（把更早的消息放在数组前面） */
+    mergePrivateHistory(arr) {
+      if (!Array.isArray(arr) || arr.length === 0) {
+        this.loadingPrivateHistory = false;
+        return;
+      }
+      const peerId = this.targetId;
+      if (!this.privateMessages[peerId] || !Array.isArray(this.privateMessages[peerId])) {
+        this.$set(this.privateMessages, peerId, []);
+      }
+
+      // 当前数组中已有 id 集合（用于去重）
+      const existed = new Set(this.privateMessages[peerId].map(m => m.msgId));
+
+      // 假设服务端按 create_time DESC 返回（最新在前）：
+      // 为把历史“插到顶部（旧消息在前）”我们先 reverse，再concat
+      const toInsert = Array.from(arr).reverse().filter(m => m && m.msgId && !existed.has(m.msgId));
+      this.privateMessages[peerId] = toInsert.concat(this.privateMessages[peerId]);
+
+      // 如果返回条数 < pageSize 则说明没有更多
+      if (arr.length < this.privatePageSize) {
+        this.privateHasMore = false;
+      }
+      this.loadingPrivateHistory = false;
+
+      // 合并完成后，统一设置 status（便于前端回显）
+      const msgs = this.privateMessages[peerId];
+      if (Array.isArray(msgs)) {
+        msgs.forEach(m => {
+          // 仅为自己发送的消息显示已读/未读
+          if (m.fromUser === this.userId) {
+            m.status = (m.isRead ? 'isRead' : (m.status || 'success'));
+          } else {
+            m.status = m.status || 'success';
+          }
+        });
+      }
+
     },
 
     /** 合并群聊历史 */
@@ -391,7 +505,12 @@ export default {
         }, 500)
       }
     })()
+
+
+
   },
+
+
 }
 </script>
 

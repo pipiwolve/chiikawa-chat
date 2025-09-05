@@ -20,7 +20,7 @@ public interface ChatMessageMapper {
                          @Param("readerId") String readerId);
 
     // 按 msgIds 查询发送方（用于回执 fallback）
-    List<ChatMessage> selectSendersByMsgIds(@Param("msgIds") List<String> msgIds, @Param("readerId") String readerId);
+    List<ChatMessage> selectFromByMsgIds(@Param("msgIds") List<String> msgIds, @Param("readerId") String readerId);
 
     // 获取和某用户有过私聊的用户对象
     List<ChatUser> getPrivateChatUsers(@Param("userId") String userId);
@@ -29,6 +29,7 @@ public interface ChatMessageMapper {
     ChatMessage selectLastPrivateMessage(@Param("userId") String userId,
                                          @Param("peerId") String peerId);
 
+    List<ChatMessage> selectPrivateHistory(@Param("userId") String userId, @Param("peerId") String peerId);
 
     /**
      * 计算私聊未读信息

@@ -14,6 +14,7 @@ let connectStatus = CONNECT_STATUS.DISCONNECTED;
 let activeTarget = null;
 let onReplayGroupHistory = null;
 let onJoinGroup = null;
+let onPrivateHistory = null;
 
 export function connectSocket(userId, onMessage) {
     if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING) return;
@@ -384,7 +385,17 @@ export function setReplayGroupHistoryHandler(callback) {
 export function sendGroupCursor(groupId, msgId) {
     sendCmdMessage(102, { groupId, msgId })
 }
-export function setReadAckHandler(callback) { onReadAck = callback; }
+export function setReadAckHandler(callback) {
+    onReadAck = callback;
+
+    registerCmdHandler(101, (msg) => {
+        if (!msg) return;
+        // msg.msgIds should be array
+        if (msg.toUser === currentUserId && Array.isArray(msg.msgIds)) {
+            onReadAck && onReadAck(msg.msgIds);
+        }
+    });
+}
 export function setActiveTarget(targetId) { activeTarget = targetId; }
 export function closeSocket() {
     if (socketTask) {
@@ -397,3 +408,24 @@ export function closeSocket() {
     }
 }
 export function isConnected() { return connectStatus === CONNECT_STATUS.CONNECTED; }
+
+
+
+export function sendPrivateHistoryRequest(peerId, pageNum = 1, pageSize = 50, cursorMsgId = null) {
+    sendCmdMessage(105, { peerId, pageNum, pageSize, cursorMsgId });
+}
+
+export function setPrivateHistoryHandler(callback) {
+    onPrivateHistory = callback;
+
+    // 注册 cmd=105 的处理器：收到 server 的 {cmd:105, data:[...]} 或 {cmd:105, data:null}
+    registerCmdHandler(105, (msg) => {
+        if (!msg) return;
+        // 支持两种服务端包装：
+        // 1) msg.data 是数组（推荐）
+        // 2) msg 本身就是数组（如果服务端直接发数组）
+        const arr = Array.isArray(msg.data) ? msg.data : (Array.isArray(msg) ? msg : []);
+        arr.forEach(m => { if (m) m.type = 'private'; });
+        onPrivateHistory && onPrivateHistory(arr);
+    });
+}

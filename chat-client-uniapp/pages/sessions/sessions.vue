@@ -52,6 +52,12 @@ export default {
       this.loadSessions()
     })
 
+
+    registerCmdHandler(101, (data) => {
+      // 收到已读回执 → 会话的未读数可能已变，刷新 sessions
+      this.loadSessions();
+    });
+
     // 群聊相关回调
     registerCmdHandler(201, () => this.loadSessions()) // 加群成功
     registerCmdHandler(203, () => this.loadSessions()) // 创建群成功
@@ -80,6 +86,7 @@ export default {
     unregisterCmdHandler(201)
     unregisterCmdHandler(203)
     unregisterCmdHandler(204)
+    unregisterCmdHandler(101)
     unregisterCmdHandler(2)
     unregisterCmdHandler(3)
   },

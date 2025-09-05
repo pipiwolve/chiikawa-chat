@@ -49,4 +49,5 @@ public class ChatMessage implements Serializable {
     private Integer PageNum;
     private Integer PageSize;
 
+    private String peerId;
 }

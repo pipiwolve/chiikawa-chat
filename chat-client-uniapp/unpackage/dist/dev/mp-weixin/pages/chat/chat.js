@@ -22,7 +22,11 @@ const _sfc_main = {
       groupHasMore: true,
       loadingHistory: false,
       unreadMsgIdsBuffer: [],
-      unreadMsgIdsTimer: null
+      unreadMsgIdsTimer: null,
+      privatePageNum: 1,
+      privatePageSize: 50,
+      privateHasMore: true,
+      loadingPrivateHistory: false
     };
   },
   computed: {
@@ -36,7 +40,7 @@ const _sfc_main = {
     }
   },
   onLoad(options) {
-    common_vendor.index.__f__("log", "at pages/chat/chat.vue:107", "进入聊天页:", options);
+    common_vendor.index.__f__("log", "at pages/chat/chat.vue:114", "进入聊天页:", options);
     this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
     this.targetId = options.targetId;
     this.targetType = options.type;
@@ -46,7 +50,6 @@ const _sfc_main = {
       this.$set(this.privateMessages, this.targetId, []);
     if (this.targetType === "group")
       this.$set(this.groupMessages, this.targetId, []);
-    utils_socket.setReadAckHandler((msgIds) => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]));
     utils_socket.setGroupHistoryHandler((arr) => {
       this.loadingHistory = false;
       if (!Array.isArray(arr) || arr.length === 0) {
@@ -66,21 +69,54 @@ const _sfc_main = {
         this.scrollTop = 1e5;
       });
     });
-    utils_socket.connectSocket(this.userId, (msg) => common_vendor.index.__f__("log", "at pages/chat/chat.vue:142", "[WS] 收到消息:", msg));
+    utils_socket.setPrivateHistoryHandler((arr) => {
+      this.loadingPrivateHistory = false;
+      if (!Array.isArray(arr) || arr.length === 0) {
+        if (this.privatePageNum === 1)
+          this.privateHasMore = false;
+        return;
+      }
+      this.mergePrivateHistory(arr);
+      const peerId = this.targetId;
+      const unreadIds = arr.filter((m) => m.fromUser === peerId && !m.isRead).map((m) => m.msgId);
+      if (unreadIds.length > 0)
+        this.collectUnreadMsgIds(unreadIds, peerId);
+      this.$nextTick(() => {
+        this.scrollTop = 1e5;
+      });
+    });
+    utils_socket.setReadAckHandler((msgIds) => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]));
+    utils_socket.connectSocket(this.userId, (msg) => common_vendor.index.__f__("log", "at pages/chat/chat.vue:168", "[WS] 收到消息:", msg));
     utils_socket.onPrivateMessage((msg) => this.handleSocketMessage(msg));
     utils_socket.onGroupMessage((msg) => this.handleSocketMessage(msg));
     if (this.targetType === "private") {
-      utils_socket.fetchOfflinePrivateMessages(this.targetId, (offlineMsgs) => {
-        if (Array.isArray(offlineMsgs)) {
-          this.$set(this.privateMessages, this.targetId, offlineMsgs.map((m) => ({ ...m, isOffline: true, status: "success" })));
-          const unreadIds = offlineMsgs.filter((m) => m.fromUser === this.targetId).map((m) => m.msgId);
-          if (unreadIds.length > 0)
-            this.collectUnreadMsgIds(unreadIds, this.targetId);
-          this.$nextTick(() => {
-            this.scrollTop = 1e5;
-          });
-        }
-      });
+      this.privatePageNum = 1;
+      this.privateHasMore = true;
+      this.loadingPrivateHistory = true;
+      utils_socket.sendPrivateHistoryRequest(this.targetId, this.privatePageNum, this.privatePageSize);
+      setTimeout(() => {
+        utils_socket.fetchOfflinePrivateMessages(this.targetId, (offlineMsgs) => {
+          if (Array.isArray(offlineMsgs) && offlineMsgs.length > 0) {
+            if (!this.privateMessages[this.targetId]) {
+              this.$set(this.privateMessages, this.targetId, []);
+            }
+            offlineMsgs.sort((a, b) => a.timestamp - b.timestamp);
+            offlineMsgs.forEach((m) => {
+              this.privateMessages[this.targetId].push({
+                ...m,
+                isOffline: true,
+                status: "success"
+              });
+            });
+            const unreadIds = offlineMsgs.filter((m) => m.fromUser === this.targetId).map((m) => m.msgId);
+            if (unreadIds.length > 0)
+              this.collectUnreadMsgIds(unreadIds, this.targetId);
+            this.$nextTick(() => {
+              this.scrollTop = 1e5;
+            });
+          }
+        });
+      }, 200);
     }
     if (this.targetType === "group") {
       this.groupPageNum = 1;
@@ -101,7 +137,9 @@ const _sfc_main = {
     utils_socket.unregisterCmdHandler(2);
     utils_socket.unregisterCmdHandler(3);
     utils_socket.unregisterCmdHandler(103);
+    utils_socket.unregisterCmdHandler(105);
     utils_socket.setGroupHistoryHandler(null);
+    utils_socket.setPrivateHistoryHandler && utils_socket.setPrivateHistoryHandler(null);
     clearInterval(this.connTimer);
     utils_socket.unregisterCmdHandler(104);
     utils_socket.setReplayGroupHistoryHandler(null);
@@ -109,7 +147,7 @@ const _sfc_main = {
   methods: {
     /** 处理 socket 收到的消息 */
     handleSocketMessage(msg) {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:192", "进入 handleSocketMessage:", msg);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:253", "进入 handleSocketMessage:", msg);
       if (msg.type === "private") {
         const peerId = msg.fromUser === this.userId ? msg.toUser : msg.fromUser;
         if (!this.privateMessages[peerId])
@@ -200,7 +238,7 @@ const _sfc_main = {
     collectUnreadMsgIds(ids, peerId) {
       if (!peerId)
         return;
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:301", "收集未读ID:", ids, "for peer:", peerId);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:362", "收集未读ID:", ids, "for peer:", peerId);
       if (!this.unreadMsgIdsBufferMap)
         this.unreadMsgIdsBufferMap = {};
       if (!this.unreadMsgIdsBufferMap[peerId])
@@ -219,13 +257,24 @@ const _sfc_main = {
         this.unreadMsgIdsTimerMap[peerId] = null;
       }, 300);
     },
-    /** 滚动加载群历史消息 */
+    // 滚动加载私聊（在 scroll 至顶触发）
     loadMoreMessages() {
-      if (this.targetType !== "group" || !this.groupHasMore || this.loadingHistory)
+      if (this.targetType === "group") {
+        if (!this.groupHasMore || this.loadingHistory)
+          return;
+        this.loadingHistory = true;
+        this.groupPageNum += 1;
+        utils_socket.sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize);
         return;
-      this.loadingHistory = true;
-      this.groupPageNum += 1;
-      utils_socket.sendGroupHistoryRequest(this.targetId, this.groupPageNum, this.groupPageSize);
+      }
+      if (this.targetType === "private") {
+        if (!this.privateHasMore || this.loadingPrivateHistory)
+          return;
+        this.loadingPrivateHistory = true;
+        this.privatePageNum += 1;
+        utils_socket.sendPrivateHistoryRequest(this.targetId, this.privatePageNum, this.privatePageSize);
+        return;
+      }
     },
     /** 工具方法 */
     disconnect() {
@@ -257,25 +306,53 @@ const _sfc_main = {
       else
         utils_socket.sendGroupMsg(msg);
     },
+    /** 合并私聊历史（把更早的消息放在数组前面） */
+    mergePrivateHistory(arr) {
+      if (!Array.isArray(arr) || arr.length === 0) {
+        this.loadingPrivateHistory = false;
+        return;
+      }
+      const peerId = this.targetId;
+      if (!this.privateMessages[peerId] || !Array.isArray(this.privateMessages[peerId])) {
+        this.$set(this.privateMessages, peerId, []);
+      }
+      const existed = new Set(this.privateMessages[peerId].map((m) => m.msgId));
+      const toInsert = Array.from(arr).reverse().filter((m) => m && m.msgId && !existed.has(m.msgId));
+      this.privateMessages[peerId] = toInsert.concat(this.privateMessages[peerId]);
+      if (arr.length < this.privatePageSize) {
+        this.privateHasMore = false;
+      }
+      this.loadingPrivateHistory = false;
+      const msgs = this.privateMessages[peerId];
+      if (Array.isArray(msgs)) {
+        msgs.forEach((m) => {
+          if (m.fromUser === this.userId) {
+            m.status = m.isRead ? "isRead" : m.status || "success";
+          } else {
+            m.status = m.status || "success";
+          }
+        });
+      }
+    },
     /** 合并群聊历史 */
     mergeGroupHistory(arr) {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:360", "[mergeGroupHistory] 进入, arr:", arr);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:474", "[mergeGroupHistory] 进入, arr:", arr);
       const gid = this.targetId;
       if (!this.groupMessages[gid] || !Array.isArray(this.groupMessages[gid])) {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:363", "[mergeGroupHistory] 初始化 groupMessages[gid]");
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:477", "[mergeGroupHistory] 初始化 groupMessages[gid]");
         this.$set(this.groupMessages, gid, []);
       }
       const existed = new Set(this.groupMessages[gid].map((m) => m.msgId));
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:368", "[mergeGroupHistory] 已有消息 ID:", existed);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:482", "[mergeGroupHistory] 已有消息 ID:", existed);
       arr.forEach((m) => {
         if (m && m.msgId && !existed.has(m.msgId)) {
-          common_vendor.index.__f__("log", "at pages/chat/chat.vue:372", "[mergeGroupHistory] 插入新消息:", m);
+          common_vendor.index.__f__("log", "at pages/chat/chat.vue:486", "[mergeGroupHistory] 插入新消息:", m);
           this.groupMessages[gid].unshift(m);
         } else {
-          common_vendor.index.__f__("log", "at pages/chat/chat.vue:376", "[mergeGroupHistory] 跳过重复或非法消息:", m);
+          common_vendor.index.__f__("log", "at pages/chat/chat.vue:490", "[mergeGroupHistory] 跳过重复或非法消息:", m);
         }
       });
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:379", "[mergeGroupHistory] 最终 groupMessages[gid]:", this.groupMessages[gid]);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:493", "[mergeGroupHistory] 最终 groupMessages[gid]:", this.groupMessages[gid]);
       this.loadingHistory = false;
     },
     /** 防抖上报群游标 */
