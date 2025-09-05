@@ -10,6 +10,7 @@ import org.tio.chat.model.ChatMessage;
 import org.tio.chat.util.JsonUtil;
 import org.tio.core.ChannelContext;
 import org.tio.core.Tio;
+import org.tio.utils.lock.SetWithLock;
 import org.tio.websocket.common.WsResponse;
 
 import java.util.*;
@@ -35,18 +36,6 @@ public class ChatGroupService {
         try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
             ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
             return mapper.findOwnerId(groupId);
-        }
-    }
-
-    // 添加群成员
-    public static boolean addMember(String groupId, String userId, String role) {
-        try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
-            ChatGroupMapper mapper = sqlSession.getMapper(ChatGroupMapper.class);
-            ChatGroupMember member = new ChatGroupMember();
-            member.setUserId(userId);
-            member.setGroupId(groupId);
-            member.setRole("member");
-            return mapper.addMember(member) > 0;
         }
     }
 
@@ -90,8 +79,13 @@ public class ChatGroupService {
                 ChatGroupMember member = new ChatGroupMember();
                 member.setUserId(uid);
                 member.setGroupId(groupId);
-                member.setRole("member");
-                 mapper.addMember(member);
+                if (uid.equals(ownerId)) {
+                    member.setRole("owner");
+                } else {
+                    member.setRole("member");
+                }
+                mapper.addMember(member);
+
             }
 
             // 查询回填
@@ -101,6 +95,15 @@ public class ChatGroupService {
             if (ctx != null) {
                 Tio.bindGroup(ctx, groupId);
             }
+
+            // 4. 在线成员绑定群
+            for (String uid : members) {
+                SetWithLock<ChannelContext> mCtx = Tio.getChannelContextsByUserid(ctx.tioConfig, uid);
+                if (mCtx != null && mCtx.getObj() != null && !mCtx.getObj().isEmpty()) {
+                    // 用户在线，绑定群
+                    Tio.bindGroup(ctx.tioConfig, uid, groupId);
+                    }
+                }
 
 
             return out;

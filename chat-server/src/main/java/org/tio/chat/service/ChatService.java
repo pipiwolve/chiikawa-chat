@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatService {
 
     // -------------------- T-IO 全局配置 --------------------
-    private static final TioConfig TIO = ChatServerStarter.getTioServerConfig();
+    static final TioConfig TIO = ChatServerStarter.getTioServerConfig();
 
     // -------------------- MyBatis（无 Spring） --------------------
     static final SqlSessionFactory SQL_SESSION_FACTORY;

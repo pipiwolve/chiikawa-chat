@@ -63,10 +63,17 @@ export default {
     registerCmdHandler(203, () => this.loadSessions()) // 创建群成功
     registerCmdHandler(204, () => this.loadSessions()) // 被拉入群
 
-    // 消息显示回调
-    registerCmdHandler(2, () => this.loadSessions())
-    registerCmdHandler(3, () => this.loadSessions())
+    // ✅ 监听全局 sessionsUpdated 事件
+    uni.$on("sessionsUpdated", (resp) => {
+      console.log('[sessions.vue] 收到 sessionsUpdated:', resp)
+      this.users = (resp.sessions || []).map(s => ({
+        ...s,
+        hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
+      }))
+    })
 
+
+    uni.$on('clearUnread', this.loadSessions)
     // ✅ 监听发送方主动触发的刷新
     uni.$on('refreshSessions', this.loadSessions)
     // 全局刷新事件订阅
@@ -79,6 +86,9 @@ export default {
     uni.$off('refreshFriends', this.loadSessions)
     uni.$off('refreshGroups', this.loadSessions)
     uni.$off('refreshSessions', this.loadSessions)
+    uni.$off('clearUnread', this.loadSessions)
+    uni.$off("sessionsUpdated")
+
 
     // 注销 WebSocket 回调
     unregisterCmdHandler(205)
@@ -87,8 +97,6 @@ export default {
     unregisterCmdHandler(203)
     unregisterCmdHandler(204)
     unregisterCmdHandler(101)
-    unregisterCmdHandler(2)
-    unregisterCmdHandler(3)
   },
 
   methods: {

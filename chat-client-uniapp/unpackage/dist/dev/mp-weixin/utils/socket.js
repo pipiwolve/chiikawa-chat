@@ -10,6 +10,7 @@ let messageQueue = [];
 const QUEUE_KEY = "socket_message_queue";
 let onReadAck = null;
 let cmdCallbacks = {};
+const multiHandlers = {};
 const msgStatusCallbacks = /* @__PURE__ */ new Map();
 const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
@@ -26,20 +27,20 @@ function connectSocket(userId, onMessage) {
     socketTask = common_vendor.index.connectSocket({
       url: wsUrl,
       success() {
-        common_vendor.index.__f__("log", "at utils/socket.js:30", "WebSocket 连接请求已发起");
+        common_vendor.index.__f__("log", "at utils/socket.js:31", "WebSocket 连接请求已发起");
       },
       fail(err) {
-        common_vendor.index.__f__("error", "at utils/socket.js:31", "WebSocket 连接请求失败", err);
+        common_vendor.index.__f__("error", "at utils/socket.js:32", "WebSocket 连接请求失败", err);
         attemptReconnect(onMessage);
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:34", "WebSocket 连接异常", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:35", "WebSocket 连接异常", e);
     attemptReconnect(onMessage);
     return;
   }
   socketTask.onOpen(() => {
-    common_vendor.index.__f__("log", "at utils/socket.js:40", "📡 WebSocket 已打开");
+    common_vendor.index.__f__("log", "at utils/socket.js:41", "📡 WebSocket 已打开");
     connectStatus = CONNECT_STATUS.CONNECTED;
     reconnectCount = 0;
     loadQueueFromStorage();
@@ -47,17 +48,15 @@ function connectSocket(userId, onMessage) {
   });
   socketTask.onMessage((msg) => {
     var _a;
-    common_vendor.index.__f__("log", "at utils/socket.js:50", "[WS原始 res]", msg);
+    common_vendor.index.__f__("log", "at utils/socket.js:51", "[WS原始 res]", msg);
     const dataStr = msg.data;
-    common_vendor.index.__f__("log", "at utils/socket.js:52", "[WS解析后的 data]", dataStr);
+    common_vendor.index.__f__("log", "at utils/socket.js:53", "[WS解析后的 data]", dataStr);
     if (!dataStr || dataStr === "null" || dataStr === "undefined")
       return;
     try {
       const data = JSON.parse(dataStr);
-      common_vendor.index.__f__("log", "at utils/socket.js:58", "[WS解析后的 data]", data);
-      if (data.cmd && cmdCallbacks[data.cmd]) {
-        cmdCallbacks[data.cmd](data);
-      }
+      common_vendor.index.__f__("log", "at utils/socket.js:59", "[WS解析后的 data]", data);
+      dispatchMessage(data.cmd, data);
       if (data && typeof data === "object" && data.cmd === 101 && data.msgIds && Array.isArray(data.msgIds)) {
         if (data.toUser === currentUserId) {
           onReadAck && onReadAck(data.msgIds);
@@ -70,16 +69,16 @@ function connectSocket(userId, onMessage) {
       }
       onMessage && onMessage(data);
     } catch (e) {
-      common_vendor.index.__f__("error", "at utils/socket.js:81", "消息解析错误", e, dataStr);
+      common_vendor.index.__f__("error", "at utils/socket.js:79", "消息解析错误", e, dataStr);
     }
   });
   socketTask.onClose(() => {
-    common_vendor.index.__f__("log", "at utils/socket.js:86", "WebSocket 已关闭");
+    common_vendor.index.__f__("log", "at utils/socket.js:84", "WebSocket 已关闭");
     connectStatus = CONNECT_STATUS.DISCONNECTED;
     attemptReconnect(onMessage);
   });
   socketTask.onError((err) => {
-    common_vendor.index.__f__("error", "at utils/socket.js:92", "WebSocket 错误", err);
+    common_vendor.index.__f__("error", "at utils/socket.js:90", "WebSocket 错误", err);
     connectStatus = CONNECT_STATUS.DISCONNECTED;
     attemptReconnect(onMessage);
   });
@@ -111,18 +110,18 @@ function flushQueue() {
         setTimeout(flushQueue, 50);
       },
       fail(err) {
-        common_vendor.index.__f__("warn", "at utils/socket.js:125", "[socket] flushQueue 发送失败:", err);
+        common_vendor.index.__f__("warn", "at utils/socket.js:123", "[socket] flushQueue 发送失败:", err);
       }
     });
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:129", "[socket] flushQueue 异常:", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:127", "[socket] flushQueue 异常:", e);
   }
 }
 function persistQueue() {
   try {
     common_vendor.index.setStorageSync(QUEUE_KEY, messageQueue);
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:135", "[socket] persistQueue error", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:133", "[socket] persistQueue error", e);
   }
 }
 function loadQueueFromStorage() {
@@ -130,7 +129,7 @@ function loadQueueFromStorage() {
     const q = common_vendor.index.getStorageSync(QUEUE_KEY);
     messageQueue = Array.isArray(q) ? q : [];
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:142", "[socket] loadQueueFromStorage error", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:140", "[socket] loadQueueFromStorage error", e);
     messageQueue = [];
   }
 }
@@ -177,8 +176,39 @@ function sendCmdMessage(cmd, payload = {}) {
 function registerCmdHandler(cmd, callback) {
   cmdCallbacks[cmd] = callback;
 }
-function unregisterCmdHandler(cmd) {
-  delete cmdCallbacks[cmd];
+function registerMultiHandler(cmd, callback) {
+  if (!multiHandlers[cmd])
+    multiHandlers[cmd] = [];
+  if (!multiHandlers[cmd].includes(callback)) {
+    multiHandlers[cmd].push(callback);
+  }
+}
+function unregisterCmdHandler(cmd, callback) {
+  if (cmdCallbacks[cmd])
+    delete cmdCallbacks[cmd];
+  if (multiHandlers[cmd]) {
+    multiHandlers[cmd] = multiHandlers[cmd].filter((cb) => cb !== callback);
+    if (multiHandlers[cmd].length === 0)
+      delete multiHandlers[cmd];
+  }
+}
+function dispatchMessage(cmd, data) {
+  if (cmdCallbacks[cmd]) {
+    try {
+      cmdCallbacks[cmd](data);
+    } catch (e) {
+      common_vendor.index.__f__("error", "at utils/socket.js:217", `[dispatchMessage] 单播 cmd=${cmd} 出错`, e);
+    }
+  }
+  if (multiHandlers[cmd]) {
+    multiHandlers[cmd].forEach((cb) => {
+      try {
+        cb(data);
+      } catch (e) {
+        common_vendor.index.__f__("error", "at utils/socket.js:224", `[dispatchMessage] 多播 cmd=${cmd} 出错`, e);
+      }
+    });
+  }
 }
 function sendRegister(userId, password, nickname) {
   sendCmdMessage(10, { fromUser: userId, content: password, nickname });
@@ -204,7 +234,7 @@ function sendJoinGroupRequest(groupId, userId) {
         else
           reject(new Error("No response from server"));
       });
-      common_vendor.index.__f__("log", "at utils/socket.js:231", "[sendJoinGroupRequest] 已发送加入群聊申请:", msg);
+      common_vendor.index.__f__("log", "at utils/socket.js:268", "[sendJoinGroupRequest] 已发送加入群聊申请:", msg);
     } catch (e) {
       reject(e);
     }
@@ -234,11 +264,11 @@ function fetchGroups(onResult) {
 function setJoinGroupHandler(callback) {
   onJoinGroup = callback;
   registerCmdHandler(214, (msg) => {
-    common_vendor.index.__f__("log", "at utils/socket.js:278", "[214] 收到加入群申请通知:", msg);
+    common_vendor.index.__f__("log", "at utils/socket.js:315", "[214] 收到加入群申请通知:", msg);
     onJoinGroup && onJoinGroup(msg);
   });
   registerCmdHandler(210, (msg) => {
-    common_vendor.index.__f__("log", "at utils/socket.js:283", "[210] 群聊列表需要刷新:", msg);
+    common_vendor.index.__f__("log", "at utils/socket.js:320", "[210] 群聊列表需要刷新:", msg);
     onJoinGroup && onJoinGroup(msg);
   });
 }
@@ -248,7 +278,7 @@ function sendMsg(msg, onStatusChange) {
     sendData(data);
     onStatusChange && onStatusChange("success");
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:296", "发送私聊失败", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:333", "发送私聊失败", e);
     onStatusChange && onStatusChange("failed");
   }
 }
@@ -258,7 +288,7 @@ function sendGroupMsg(msg, onStatusChange) {
     sendData(data);
     onStatusChange && onStatusChange("success");
   } catch (e) {
-    common_vendor.index.__f__("error", "at utils/socket.js:308", "发送群聊失败", e);
+    common_vendor.index.__f__("error", "at utils/socket.js:345", "发送群聊失败", e);
     onStatusChange && onStatusChange("failed");
   }
 }
@@ -267,11 +297,27 @@ function fetchGroupRequests() {
   sendCmdMessage(215, { fromUser: userId });
 }
 function onPrivateMessage(callback) {
-  registerCmdHandler(2, callback);
+  registerMultiHandler(2, callback);
 }
 function onGroupMessage(callback) {
-  registerCmdHandler(3, callback);
+  registerMultiHandler(3, callback);
 }
+registerMultiHandler(2, (msg) => {
+  common_vendor.index.__f__("log", "at utils/socket.js:368", "[socket.js] 收到私聊消息:", msg);
+  fetchSessions((resp) => {
+    common_vendor.index.__f__("log", "at utils/socket.js:372", "[socket.js] 刷新会话（私聊消息触发）:", resp.sessions);
+    common_vendor.index.setStorageSync("latestSessions", resp.sessions || []);
+    common_vendor.index.$emit("sessionsUpdated", resp);
+  });
+});
+registerMultiHandler(3, (msg) => {
+  common_vendor.index.__f__("log", "at utils/socket.js:381", "[socket.js] 收到群聊消息:", msg);
+  fetchSessions((resp) => {
+    common_vendor.index.__f__("log", "at utils/socket.js:384", "[socket.js] 刷新会话（群聊消息触发）:", resp.sessions);
+    common_vendor.index.setStorageSync("latestSessions", resp.sessions || []);
+    common_vendor.index.$emit("sessionsUpdated", resp);
+  });
+});
 function sendReadAck(msgIds, peerId) {
   if (!Array.isArray(msgIds) || msgIds.length === 0)
     return;
@@ -281,7 +327,7 @@ function sendReadAck(msgIds, peerId) {
   if (socketTask && connectStatus === CONNECT_STATUS.CONNECTED) {
     try {
       socketTask.send({ data: JSON.stringify(ackData) });
-      common_vendor.index.__f__("log", "at utils/socket.js:334", "发送已读回执:", ackData);
+      common_vendor.index.__f__("log", "at utils/socket.js:397", "发送已读回执:", ackData);
     } catch (e) {
       messageQueue.push(ackData);
       persistQueue();

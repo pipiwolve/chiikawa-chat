@@ -8,9 +8,9 @@
     <!-- 插入一条消息 -->
     <insert id="insert" parameterType="org.tio.chat.model.ChatMessage">
         INSERT INTO chat_message
-        (msg_id, from_user, to_user, group_id, content, cmd, is_read, is_offline, create_time)
+        (msg_id, from_user, to_user, group_id, content, cmd, is_offline, create_time)
         VALUES
-            (#{msgId}, #{fromUser}, #{toUser}, #{groupId}, #{content}, #{cmd}, #{isRead}, #{isOffline}, NOW())
+            (#{msgId}, #{fromUser}, #{toUser}, #{groupId}, #{content}, #{cmd}, #{isOffline}, NOW())
     </insert>
 
     <!-- 标记某用户某对话的离线消息已投递 -->

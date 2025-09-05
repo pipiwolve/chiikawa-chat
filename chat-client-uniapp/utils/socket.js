@@ -8,6 +8,7 @@ let messageQueue = [];
 const QUEUE_KEY = 'socket_message_queue';
 let onReadAck = null;
 let cmdCallbacks = {}; // 存放 cmd -> 回调
+const multiHandlers = {}
 const msgStatusCallbacks = new Map();
 const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
@@ -57,10 +58,7 @@ export function connectSocket(userId, onMessage) {
             const data = JSON.parse(dataStr);
             console.log("[WS解析后的 data]", data);
 
-            // 🔹 cmd处理
-            if (data.cmd && cmdCallbacks[data.cmd]) {
-                cmdCallbacks[data.cmd](data);
-            }
+            dispatchMessage(data.cmd, data)
 
             // 已读回执 101
             if (data && typeof data === 'object' && data.cmd === 101 && data.msgIds && Array.isArray(data.msgIds)) {
@@ -186,8 +184,47 @@ export function registerCmdHandler(cmd, callback) {
     cmdCallbacks[cmd] = callback;
 }
 
-export function unregisterCmdHandler(cmd) {
-    delete cmdCallbacks[cmd]
+
+/**
+ * 多播注册（追加式）
+ * 用于事件广播，例如聊天消息 cmd=2/3
+ */
+export function registerMultiHandler(cmd, callback) {
+    if (!multiHandlers[cmd]) multiHandlers[cmd] = []
+    if (!multiHandlers[cmd].includes(callback)) {
+        multiHandlers[cmd].push(callback)
+    }
+}
+
+/**
+ * 注销
+ */
+export function unregisterCmdHandler(cmd, callback) {
+    if (cmdCallbacks[cmd]) delete cmdCallbacks[cmd]
+    if (multiHandlers[cmd]) {
+        multiHandlers[cmd] = multiHandlers[cmd].filter(cb => cb !== callback)
+        if (multiHandlers[cmd].length === 0) delete multiHandlers[cmd]
+    }
+}
+
+/**
+ * 消息分发（WS 收到消息后调用）
+ */
+export function dispatchMessage(cmd, data) {
+    // 单播
+    if (cmdCallbacks[cmd]) {
+        try { cmdCallbacks[cmd](data) } catch (e) {
+            console.error(`[dispatchMessage] 单播 cmd=${cmd} 出错`, e)
+        }
+    }
+    // 多播
+    if (multiHandlers[cmd]) {
+        multiHandlers[cmd].forEach(cb => {
+            try { cb(data) } catch (e) {
+                console.error(`[dispatchMessage] 多播 cmd=${cmd} 出错`, e)
+            }
+        })
+    }
 }
 
 // ===============================
@@ -316,13 +353,39 @@ export function fetchGroupRequests() {
     sendCmdMessage(215, { fromUser: userId })
 }
 
+// 私聊消息：多播
 export function onPrivateMessage(callback) {
-    registerCmdHandler(2, callback);
+    registerMultiHandler(2, callback)
 }
 
+// 群聊消息：多播
 export function onGroupMessage(callback) {
-    registerCmdHandler(3, callback);
+    registerMultiHandler(3, callback)
 }
+
+// ✅ 全局注册私聊消息（cmd=2）
+registerMultiHandler(2, (msg) => {
+    console.log('[socket.js] 收到私聊消息:', msg)
+
+    // 每次收到消息 → 拉取最新会话
+    fetchSessions((resp) => {
+        console.log('[socket.js] 刷新会话（私聊消息触发）:', resp.sessions)
+        uni.setStorageSync("latestSessions", resp.sessions || [])
+        // 通知所有监听者（sessions.vue）
+        uni.$emit("sessionsUpdated", resp)
+    })
+})
+
+// ✅ 全局注册群聊消息（cmd=3）
+registerMultiHandler(3, (msg) => {
+    console.log('[socket.js] 收到群聊消息:', msg)
+
+    fetchSessions((resp) => {
+        console.log('[socket.js] 刷新会话（群聊消息触发）:', resp.sessions)
+        uni.setStorageSync("latestSessions", resp.sessions || [])
+        uni.$emit("sessionsUpdated", resp)
+    })
+})
 
 export function sendReadAck(msgIds, peerId) {
     if (!Array.isArray(msgIds) || msgIds.length === 0) return

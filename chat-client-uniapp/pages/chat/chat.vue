@@ -123,6 +123,7 @@ export default {
     if (this.targetType === 'group') this.$set(this.groupMessages, this.targetId, [])
 
 
+
     // 注册回调
     setGroupHistoryHandler(arr => {
       this.loadingHistory = false;
@@ -131,7 +132,12 @@ export default {
         return;
       }
       this.mergeGroupHistory(arr);
-      this.$nextTick(() => { this.scrollTop = 100000 });
+      this.$nextTick(() => {
+        this.scrollTop = 100000;
+        // ⬇️ 历史消息加载完成后，立刻上报最新游标
+        const last = this.groupMessages[this.targetId][this.groupMessages[this.targetId].length - 1];
+        if (last?.msgId) this.debounceSendGroupCursor(this.targetId, last.msgId);
+      });
     });
 
 
@@ -229,14 +235,23 @@ export default {
   },
 
   onUnload() {
-    // 离开聊天页面时，清除当前会话的未读
+    if (this.targetType === 'group') {
+      const msgs = this.groupMessages[this.targetId] || [];
+      if (msgs.length > 0) {
+        const last = msgs[msgs.length - 1];
+        if (last?.msgId) sendGroupCursor(this.targetId, last.msgId); // ⬅️ 主动更新游标
+      }
+    }
+
     uni.$emit("clearUnread", {
       sessionId: this.targetId,
       type: this.targetType
-    })
+    });
 
-    unregisterCmdHandler(2)
-    unregisterCmdHandler(3)
+
+
+    unregisterCmdHandler(2, this.handleSocketMessage)
+    unregisterCmdHandler(3, this.handleSocketMessage)
     unregisterCmdHandler(103)
     unregisterCmdHandler(105)
     setGroupHistoryHandler(null)
@@ -277,8 +292,6 @@ export default {
           this.collectUnreadMsgIds([msg.msgId], peerId)
         }
 
-        uni.$emit("refreshSessions")
-
         return
       }
 
@@ -299,8 +312,6 @@ export default {
             this.scrollTop = 100000
           })
         }
-
-        uni.$emit("refreshSessions")
 
         return
       }

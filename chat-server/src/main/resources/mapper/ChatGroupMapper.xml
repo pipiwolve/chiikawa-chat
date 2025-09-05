@@ -26,7 +26,7 @@
 
     <!-- 通过群id查找群 -->
     <select id="getGroupById" resultType="org.tio.chat.model.ChatGroup">
-        SELECT group_id AS groupId, group_name AS groupName, avatar AS avatar
+        SELECT group_id AS groupId, group_name AS groupName, avatar AS avatar, create_time AS createTime
         FROM chat_group WHERE group_id = #{groupId}
     </select>
 

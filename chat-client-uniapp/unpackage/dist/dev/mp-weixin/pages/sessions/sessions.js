@@ -28,8 +28,14 @@ const _sfc_main = {
     utils_socket.registerCmdHandler(201, () => this.loadSessions());
     utils_socket.registerCmdHandler(203, () => this.loadSessions());
     utils_socket.registerCmdHandler(204, () => this.loadSessions());
-    utils_socket.registerCmdHandler(2, () => this.loadSessions());
-    utils_socket.registerCmdHandler(3, () => this.loadSessions());
+    common_vendor.index.$on("sessionsUpdated", (resp) => {
+      common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:68", "[sessions.vue] 收到 sessionsUpdated:", resp);
+      this.users = (resp.sessions || []).map((s) => ({
+        ...s,
+        hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
+      }));
+    });
+    common_vendor.index.$on("clearUnread", this.loadSessions);
     common_vendor.index.$on("refreshSessions", this.loadSessions);
     common_vendor.index.$on("refreshFriends", this.loadSessions);
     common_vendor.index.$on("refreshGroups", this.loadSessions);
@@ -38,20 +44,20 @@ const _sfc_main = {
     common_vendor.index.$off("refreshFriends", this.loadSessions);
     common_vendor.index.$off("refreshGroups", this.loadSessions);
     common_vendor.index.$off("refreshSessions", this.loadSessions);
+    common_vendor.index.$off("clearUnread", this.loadSessions);
+    common_vendor.index.$off("sessionsUpdated");
     utils_socket.unregisterCmdHandler(205);
     utils_socket.unregisterCmdHandler(207);
     utils_socket.unregisterCmdHandler(201);
     utils_socket.unregisterCmdHandler(203);
     utils_socket.unregisterCmdHandler(204);
     utils_socket.unregisterCmdHandler(101);
-    utils_socket.unregisterCmdHandler(2);
-    utils_socket.unregisterCmdHandler(3);
   },
   methods: {
     // 获取最近会话（cmd=200）
     loadSessions() {
       utils_socket.fetchSessions((resp) => {
-        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:98", "[Sessions] 最近会话:", resp.sessions);
+        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:106", "[Sessions] 最近会话:", resp.sessions);
         this.users = (resp.sessions || []).map((s) => ({
           ...s,
           // 标记未读：未读消息或存在待处理好友请求
