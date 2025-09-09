@@ -13,7 +13,7 @@
       </view>
 
       <view class="function-item" @click="gotoGroupRequest">
-        <image class="icon" src="/static/icons/join-group.png"></image>
+        <image class="icon" src="/static/icons/group-applicants.png"></image>
         <text class="label">群聊用户申请</text>
       </view>
 

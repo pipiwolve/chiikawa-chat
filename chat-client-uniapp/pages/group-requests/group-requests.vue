@@ -86,7 +86,10 @@ export default {
 
       // 通知群聊联系人页刷新
       uni.$emit("refreshGroups")
-    }
+    },
+    gotoGroups(){
+      uni.navigateTo({url: "/pages/groups/groups"})
+    },
   }
 }
 </script>

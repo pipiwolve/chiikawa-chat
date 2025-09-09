@@ -44,13 +44,16 @@ const _sfc_main = {
       common_vendor.index.showToast({ title: "已同意申请", icon: "success" });
       this.requests = this.requests.filter((r) => !(r.fromUser === req.fromUser && r.groupId === req.groupId));
       common_vendor.index.$emit("refreshGroups");
+    },
+    gotoGroups() {
+      common_vendor.index.navigateTo({ url: "/pages/groups/groups" });
     }
   }
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return common_vendor.e({
     a: common_assets._imports_0$3,
-    b: common_vendor.o((...args) => _ctx.gotoGroups && _ctx.gotoGroups(...args)),
+    b: common_vendor.o((...args) => $options.gotoGroups && $options.gotoGroups(...args)),
     c: common_vendor.f($data.requests, (req, index, i0) => {
       return {
         a: req.avatar || $data.defaultAvatar,

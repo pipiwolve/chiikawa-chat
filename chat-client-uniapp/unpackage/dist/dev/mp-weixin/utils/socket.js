@@ -22,7 +22,7 @@ function connectSocket(userId, onMessage) {
     return;
   currentUserId = userId;
   connectStatus = CONNECT_STATUS.CONNECTING;
-  const wsUrl = `ws://172.20.10.13:9326`;
+  const wsUrl = `ws://172.21.67.11:9326`;
   try {
     socketTask = common_vendor.index.connectSocket({
       url: wsUrl,
