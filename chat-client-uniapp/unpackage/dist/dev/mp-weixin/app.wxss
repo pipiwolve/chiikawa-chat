@@ -1,9 +1,7 @@
-/* 颜色变量 */
-/* 行为相关颜色 */
-/* 文字基本颜色 */
-/* 背景颜色 */
+/* 水平间距 */
 /* 边框颜色 */
-/* 尺寸变量 */
+/* 水平间距 */
+/* 文字基本颜色 */
 /* 文字尺寸 */
 /* 图片尺寸 */
 /* Border Radius */
@@ -39,16 +37,16 @@
   background-color: #2979ff;
 }
 .uni-primary-disable {
-  color: #8fb9ff;
+  color: #94bcff;
 }
 .uni-primary-disable-bg {
-  background-color: #8fb9ff;
+  background-color: #94bcff;
 }
 .uni-primary-light {
-  color: #a9c9ff;
+  color: #d4e4ff;
 }
 .uni-primary-light-bg {
-  background-color: #a9c9ff;
+  background-color: #d4e4ff;
 }
 .uni-success {
   color: #18bc37;
@@ -57,16 +55,16 @@
   background-color: #18bc37;
 }
 .uni-success-disable {
-  color: #51e96e;
+  color: #8cde9b;
 }
 .uni-success-disable-bg {
-  background-color: #51e96e;
+  background-color: #8cde9b;
 }
 .uni-success-light {
-  color: #68ec81;
+  color: #d1f2d7;
 }
 .uni-success-light-bg {
-  background-color: #68ec81;
+  background-color: #d1f2d7;
 }
 .uni-warning {
   color: #f3a73f;
@@ -81,10 +79,10 @@
   background-color: #f9d39f;
 }
 .uni-warning-light {
-  color: #fbdeb7;
+  color: #fdedd9;
 }
 .uni-warning-light-bg {
-  background-color: #fbdeb7;
+  background-color: #fdedd9;
 }
 .uni-error {
   color: #e43d33;
@@ -93,16 +91,16 @@
   background-color: #e43d33;
 }
 .uni-error-disable {
-  color: #f0938d;
+  color: #f29e99;
 }
 .uni-error-disable-bg {
-  background-color: #f0938d;
+  background-color: #f29e99;
 }
 .uni-error-light {
-  color: #f3a8a4;
+  color: #fad8d6;
 }
 .uni-error-light-bg {
-  background-color: #f3a8a4;
+  background-color: #fad8d6;
 }
 .uni-info {
   color: #8f939c;
@@ -111,16 +109,16 @@
   background-color: #8f939c;
 }
 .uni-info-disable {
-  color: #c5c7cc;
+  color: #c7c9ce;
 }
 .uni-info-disable-bg {
-  background-color: #c5c7cc;
+  background-color: #c7c9ce;
 }
 .uni-info-light {
-  color: #d3d4d8;
+  color: #e9e9eb;
 }
 .uni-info-light-bg {
-  background-color: #d3d4d8;
+  background-color: #e9e9eb;
 }
 .uni-main-color {
   color: #3a3a3a;

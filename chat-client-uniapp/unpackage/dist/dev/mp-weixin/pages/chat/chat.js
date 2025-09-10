@@ -1,6 +1,8 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
 const utils_socket = require("../../utils/socket.js");
+const common_assets = require("../../common/assets.js");
+const recorderManager = common_vendor.wx$1.getRecorderManager();
 const _sfc_main = {
   data() {
     return {
@@ -8,13 +10,18 @@ const _sfc_main = {
       // { targetId: [msg1, msg2, ...] }
       groupMessages: {},
       // { groupId: [msg1, msg2, ...] }
+      messageType: "text",
+      recordStart: false,
       inputMsg: "",
       msgStatusMap: {},
       userId: "",
       targetId: "",
       targetType: "",
       currentTargetName: "",
-      currentTargetAvatar: "",
+      selfAvatar: common_vendor.index.getStorageSync("currentUserAvatar") || "",
+      // 登录时存的头像 key
+      friendAvatar: "",
+      // 会在 onLoad 里根据 target 赋值
       connectionStatus: "未连接",
       scrollTop: 0,
       groupPageNum: 1,
@@ -40,12 +47,13 @@ const _sfc_main = {
     }
   },
   onLoad(options) {
-    common_vendor.index.__f__("log", "at pages/chat/chat.vue:114", "进入聊天页:", options);
+    common_vendor.index.__f__("log", "at pages/chat/chat.vue:157", "进入聊天页:", options);
     this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
+    this.selfAvatar = common_vendor.index.getStorageSync("currentUserAvatar") || this.selfAvatar || "/static/default-avatar/yang.png";
     this.targetId = options.targetId;
     this.targetType = options.type;
     this.currentTargetName = options.name || "";
-    this.currentTargetAvatar = options.avatar || "";
+    this.friendAvatar = options.avatar || this.friendAvatar || "/static/default-avatar/helanzhu.png";
     if (this.targetType === "private")
       this.$set(this.privateMessages, this.targetId, []);
     if (this.targetType === "group")
@@ -89,7 +97,7 @@ const _sfc_main = {
       });
     });
     utils_socket.setReadAckHandler((msgIds) => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]));
-    utils_socket.connectSocket(this.userId, (msg) => common_vendor.index.__f__("log", "at pages/chat/chat.vue:174", "[WS] 收到消息:", msg));
+    utils_socket.connectSocket(this.userId, (msg) => common_vendor.index.__f__("log", "at pages/chat/chat.vue:218", "[WS] 收到消息:", msg));
     utils_socket.onPrivateMessage((msg) => this.handleSocketMessage(msg));
     utils_socket.onGroupMessage((msg) => this.handleSocketMessage(msg));
     if (this.targetType === "private") {
@@ -108,7 +116,8 @@ const _sfc_main = {
               this.privateMessages[this.targetId].push({
                 ...m,
                 isOffline: true,
-                status: "success"
+                status: "success",
+                messageType: m.messageType || "text"
               });
             });
             const unreadIds = offlineMsgs.filter((m) => m.fromUser === this.targetId).map((m) => m.msgId);
@@ -155,17 +164,22 @@ const _sfc_main = {
     utils_socket.unregisterCmdHandler(104);
     utils_socket.setReplayGroupHistoryHandler(null);
   },
+  onHide() {
+    if (this._innerAudioContext) {
+      this._innerAudioContext.stop();
+    }
+  },
   methods: {
     /** 处理 socket 收到的消息 */
     handleSocketMessage(msg) {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:268", "进入 handleSocketMessage:", msg);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:316", "进入 handleSocketMessage:", msg);
       if (msg.type === "private") {
         const peerId = msg.fromUser === this.userId ? msg.toUser : msg.fromUser;
         if (!this.privateMessages[peerId])
           this.$set(this.privateMessages, peerId, []);
         const exists = this.privateMessages[peerId].some((m) => m.msgId === msg.msgId);
         if (!exists) {
-          this.privateMessages[peerId].push({ ...msg, isOffline: false, status: msg.status || "success" });
+          this.privateMessages[peerId].push({ ...msg, isOffline: false, status: msg.status || "success", messageType: msg.messageType || "text" });
         }
         if (peerId === this.targetId) {
           this.$nextTick(() => {
@@ -183,7 +197,7 @@ const _sfc_main = {
           this.$set(this.groupMessages, gid, []);
         const existed = this.groupMessages[gid].some((m) => m.msgId === msg.msgId);
         if (!existed) {
-          this.groupMessages[gid].push({ ...msg, isOffline: false, type: "group" });
+          this.groupMessages[gid].push({ ...msg, isOffline: false, type: "group", messageType: msg.messageType || "text" });
         }
         if (this.targetType === "group" && this.targetId === gid) {
           this.$nextTick(() => {
@@ -193,7 +207,6 @@ const _sfc_main = {
             this.scrollTop = 1e5;
           });
         }
-        return;
       }
     },
     /** 发送消息 */
@@ -207,7 +220,9 @@ const _sfc_main = {
         content: this.inputMsg,
         timestamp: Date.now(),
         type: this.targetType,
-        status: "sending"
+        status: "sending",
+        messageType: "text"
+        // text / image / voice
       };
       const onStatusChange = (status) => {
         msg.status = status;
@@ -247,7 +262,7 @@ const _sfc_main = {
     collectUnreadMsgIds(ids, peerId) {
       if (!peerId)
         return;
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:373", "收集未读ID:", ids, "for peer:", peerId);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:420", "收集未读ID:", ids, "for peer:", peerId);
       if (!this.unreadMsgIdsBufferMap)
         this.unreadMsgIdsBufferMap = {};
       if (!this.unreadMsgIdsBufferMap[peerId])
@@ -282,7 +297,6 @@ const _sfc_main = {
         this.loadingPrivateHistory = true;
         this.privatePageNum += 1;
         utils_socket.sendPrivateHistoryRequest(this.targetId, this.privatePageNum, this.privatePageSize);
-        return;
       }
     },
     /** 工具方法 */
@@ -315,6 +329,164 @@ const _sfc_main = {
       else
         utils_socket.sendGroupMsg(msg);
     },
+    chooseImage() {
+      common_vendor.index.chooseImage({
+        // sourceType: 'album',
+        success: (res) => {
+          this.list.push({
+            content: res.tempFilePaths[0],
+            userType: "self",
+            messageType: "image",
+            avatar: this._selfAvatar
+          });
+          this.scrollToBottom();
+          setTimeout(() => {
+            this.list.push({
+              content: "风景好漂亮啊~",
+              userType: "friend",
+              avatar: this._friendAvatar
+            });
+            this.scrollToBottom();
+          }, 1500);
+        }
+      });
+    },
+    scrollToBottom() {
+      this.top = this.list.length * 1e3;
+    },
+    msgClick(data) {
+      if (data.messageType === "voice") {
+        if (this._innerAudioContext) {
+          this._innerAudioContext.stop();
+          this._innerAudioContext.src = data.audioSrc;
+          this._innerAudioContext.play();
+          return;
+        }
+        this.play(data.audioSrc);
+      }
+    },
+    authTips() {
+      common_vendor.index.showModal({
+        title: "提示",
+        content: "您拒绝了麦克风权限，将导致功能不能正常使用，去设置权限？",
+        confirmText: "去设置",
+        cancelText: "取消",
+        success: (res) => {
+          if (res.confirm) {
+            common_vendor.index.openSetting({
+              success: (res2) => {
+                if (res2.authSetting["scope.record"]) {
+                  common_vendor.index.__f__("log", "at pages/chat/chat.vue:540", "已授权麦克风");
+                  this._recordAuth = true;
+                } else {
+                  common_vendor.wx$1.showModal({
+                    title: "提示",
+                    content: "您未授权麦克风，功能将无法使用",
+                    showCancel: false,
+                    confirmText: "知道了"
+                  });
+                }
+              }
+            });
+          }
+        }
+      });
+    },
+    touchstart() {
+      const _permission = "scope.record";
+      common_vendor.index.getSetting({
+        success: (res) => {
+          if (res.authSetting.hasOwnProperty(_permission)) {
+            if (!res.authSetting[_permission]) {
+              this.authTips();
+            } else {
+              this._recordAuth = true;
+              recorderManager.start();
+              recorderManager.onStart(() => {
+                this.recordStart = true;
+              });
+              recorderManager.onError((res2) => {
+                common_vendor.index.__f__("log", "at pages/chat/chat.vue:579", "recorder error", res2);
+                common_vendor.index.showToast({
+                  icon: "none",
+                  title: "系统出错，请重试"
+                });
+                this.recordStart = false;
+              });
+            }
+          } else {
+            common_vendor.index.authorize({
+              scope: _permission,
+              success: () => {
+                this._recordAuth = true;
+              },
+              fail: (res2) => {
+                if (res2.error == 104) {
+                  common_vendor.index.showModal({
+                    title: "温馨提示",
+                    content: "您拒绝了隐私协议，请稍后再试",
+                    confirmText: "知道了",
+                    showCancel: false,
+                    success: () => {
+                    }
+                  });
+                } else {
+                  this.authTips();
+                }
+              }
+            });
+          }
+        }
+      });
+    },
+    touchend() {
+      if (!this._recordAuth || !this.recordStart)
+        return;
+      recorderManager.stop();
+      recorderManager.onStop((res) => {
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:625", "结束录音", res);
+        const { duration, tempFilePath } = res;
+        this.recordStart = false;
+        const peerId = this.targetId;
+        if (!this.privateMessages[peerId])
+          this.$set(this.privateMessages, peerId, []);
+        const msg = {
+          msgId: "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1e3),
+          fromUser: this.userId,
+          toUser: peerId,
+          content: `语音 ${Math.round(duration / 1e3)}''`,
+          audioSrc: tempFilePath,
+          timestamp: Date.now(),
+          type: "private",
+          messageType: "voice",
+          status: "sending",
+          // 默认 sending
+          isOffline: false
+        };
+        this.privateMessages[peerId].push(msg);
+        utils_socket.sendMsg(msg, (status) => {
+          msg.status = status;
+        });
+        this.$nextTick(() => {
+          this.scrollTop = 1e5;
+        });
+      });
+    },
+    //播放声音
+    play(src) {
+      this._innerAudioContext = common_vendor.wx$1.createInnerAudioContext();
+      this._innerAudioContext.src = src;
+      this._innerAudioContext.play();
+      this._innerAudioContext.onPlay(() => {
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:668", "开始播放");
+      });
+      this._innerAudioContext.onEnded(() => {
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:672", "播放完毕");
+      });
+      this._innerAudioContext.onError((res) => {
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:675", "audio play error", res);
+      });
+    },
     /** 合并私聊历史（把更早的消息放在数组前面） */
     mergePrivateHistory(arr) {
       if (!Array.isArray(arr) || arr.length === 0) {
@@ -326,7 +498,11 @@ const _sfc_main = {
         this.$set(this.privateMessages, peerId, []);
       }
       const existed = new Set(this.privateMessages[peerId].map((m) => m.msgId));
-      const toInsert = Array.from(arr).reverse().filter((m) => m && m.msgId && !existed.has(m.msgId));
+      const toInsert = Array.from(arr).reverse().filter((m) => m && m.msgId && !existed.has(m.msgId)).map((m) => ({
+        ...m,
+        messageType: m.messageType || "text",
+        status: m.status || "success"
+      }));
       this.privateMessages[peerId] = toInsert.concat(this.privateMessages[peerId]);
       if (arr.length < this.privatePageSize) {
         this.privateHasMore = false;
@@ -345,23 +521,29 @@ const _sfc_main = {
     },
     /** 合并群聊历史 */
     mergeGroupHistory(arr) {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:485", "[mergeGroupHistory] 进入, arr:", arr);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:727", "[mergeGroupHistory] 进入, arr:", arr);
       const gid = this.targetId;
       if (!this.groupMessages[gid] || !Array.isArray(this.groupMessages[gid])) {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:488", "[mergeGroupHistory] 初始化 groupMessages[gid]");
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:730", "[mergeGroupHistory] 初始化 groupMessages[gid]");
         this.$set(this.groupMessages, gid, []);
       }
       const existed = new Set(this.groupMessages[gid].map((m) => m.msgId));
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:493", "[mergeGroupHistory] 已有消息 ID:", existed);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:735", "[mergeGroupHistory] 已有消息 ID:", existed);
       arr.forEach((m) => {
         if (m && m.msgId && !existed.has(m.msgId)) {
-          common_vendor.index.__f__("log", "at pages/chat/chat.vue:497", "[mergeGroupHistory] 插入新消息:", m);
-          this.groupMessages[gid].unshift(m);
+          common_vendor.index.__f__("log", "at pages/chat/chat.vue:739", "[mergeGroupHistory] 插入新消息:", m);
+          this.groupMessages[gid].unshift({
+            ...m,
+            type: "group",
+            messageType: m.messageType || "text",
+            status: m.status || "success",
+            isOffline: m.isOffline || false
+          });
         } else {
-          common_vendor.index.__f__("log", "at pages/chat/chat.vue:501", "[mergeGroupHistory] 跳过重复或非法消息:", m);
+          common_vendor.index.__f__("log", "at pages/chat/chat.vue:749", "[mergeGroupHistory] 跳过重复或非法消息:", m);
         }
       });
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:504", "[mergeGroupHistory] 最终 groupMessages[gid]:", this.groupMessages[gid]);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:752", "[mergeGroupHistory] 最终 groupMessages[gid]:", this.groupMessages[gid]);
       this.loadingHistory = false;
     },
     /** 防抖上报群游标 */
@@ -380,39 +562,71 @@ const _sfc_main = {
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return common_vendor.e({
-    a: common_vendor.t($data.currentTargetName),
-    b: common_vendor.f($options.currentMessages, (item, index, i0) => {
+    a: common_vendor.f($options.currentMessages, (item, index, i0) => {
       return common_vendor.e({
-        a: common_vendor.t(item.nickname || item.fromUser),
-        b: common_vendor.t(item.content),
-        c: common_vendor.t($options.formatTimestamp(item.timestamp)),
-        d: item.fromUser === $data.userId && item.type === "private"
+        a: item.fromUser !== $data.userId
+      }, item.fromUser !== $data.userId ? {
+        b: item.avatar || $data.friendAvatar
+      } : {}, {
+        c: item.fromUser === $data.userId && item.type === "private"
       }, item.fromUser === $data.userId && item.type === "private" ? common_vendor.e({
-        e: item.status === "sending"
-      }, item.status === "sending" ? {} : item.status === "failed" ? {
-        g: common_vendor.o(($event) => $options.retrySend(item), item.msgId || index)
-      } : item.status === "success" ? {} : item.status === "isRead" ? {} : {}, {
-        f: item.status === "failed",
-        h: item.status === "success",
-        i: item.status === "isRead"
+        d: item.status === "sending"
+      }, item.status === "sending" ? {} : item.status === "failed" ? {} : item.status === "success" ? {} : item.status === "isRead" ? {} : {}, {
+        e: item.status === "failed",
+        f: item.status === "success",
+        g: item.status === "isRead"
       }) : {}, {
-        j: item.msgId || index,
-        k: common_vendor.n(item.fromUser === $data.userId ? "msg-sent" : "msg-received"),
-        l: common_vendor.n(item.isOffline ? "offline-msg" : ""),
-        m: common_vendor.n(item.status === "sending" ? "msg-sending" : ""),
-        n: common_vendor.n(item.status === "failed" ? "msg-failed" : ""),
-        o: common_vendor.n(item.status === "isRead" && item.fromUser === $data.userId && item.type === "private" ? "msg-isRead" : "")
+        h: item.messageType === "text"
+      }, item.messageType === "text" ? {
+        i: common_vendor.t(item.content),
+        j: common_vendor.t($options.formatTimestamp(item.timestamp))
+      } : item.messageType === "image" ? {
+        l: item.content,
+        m: common_vendor.o(($event) => _ctx.previewImage(item.content), item.msgId || index)
+      } : item.messageType === "voice" ? {
+        o: common_vendor.t(item.content || "播放语音")
+      } : {}, {
+        k: item.messageType === "image",
+        n: item.messageType === "voice",
+        p: item.fromUser === $data.userId
+      }, item.fromUser === $data.userId ? {
+        q: item.avatar || $data.selfAvatar
+      } : {}, {
+        r: item.msgId || index,
+        s: common_vendor.n(item.fromUser === $data.userId ? "self" : "friend"),
+        t: common_vendor.o(($event) => $options.msgClick(item), item.msgId || index)
       });
     }),
-    c: $data.loadingHistory
+    b: $data.loadingHistory
   }, $data.loadingHistory ? {} : {}, {
-    d: $data.scrollTop,
-    e: common_vendor.o((...args) => $options.loadMoreMessages && $options.loadMoreMessages(...args)),
-    f: $data.inputMsg,
-    g: common_vendor.o(($event) => $data.inputMsg = $event.detail.value),
-    h: common_vendor.o((...args) => $options.sendMsg && $options.sendMsg(...args))
-  });
+    c: $data.scrollTop,
+    d: common_vendor.o((...args) => $options.loadMoreMessages && $options.loadMoreMessages(...args)),
+    e: $data.messageType === "text"
+  }, $data.messageType === "text" ? {
+    f: common_assets._imports_0,
+    g: common_vendor.o(($event) => $data.messageType = "voice"),
+    h: common_vendor.o((...args) => $options.sendMsg && $options.sendMsg(...args)),
+    i: $data.inputMsg,
+    j: common_vendor.o(($event) => $data.inputMsg = $event.detail.value),
+    k: common_assets._imports_1,
+    l: common_vendor.o((...args) => $options.chooseImage && $options.chooseImage(...args))
+  } : $data.messageType === "voice" ? {
+    n: common_assets._imports_2,
+    o: common_vendor.o(($event) => $data.messageType = "text"),
+    p: common_vendor.t($data.recordStart ? "松开 发送" : "按住 说话"),
+    q: common_vendor.o((...args) => $options.touchstart && $options.touchstart(...args)),
+    r: common_vendor.o((...args) => $options.touchend && $options.touchend(...args))
+  } : {}, {
+    m: $data.messageType === "voice",
+    s: $data.recordStart
+  }, $data.recordStart ? {
+    t: common_vendor.f(10, (item, k0, i0) => {
+      return {
+        a: `${item / 10}s`
+      };
+    })
+  } : {});
 }
-const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
+const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render], ["__scopeId", "data-v-0a633310"]]);
 wx.createPage(MiniProgramPage);
 //# sourceMappingURL=../../../.sourcemap/mp-weixin/pages/chat/chat.js.map

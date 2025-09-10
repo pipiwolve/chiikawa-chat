@@ -1,7 +1,6 @@
 <template>
   <view class="chat-container">
     <view class="chat-right">
-      <view class="chat-header">{{ currentTargetName }}</view>
 
       <scroll-view
           scroll-y
@@ -13,39 +12,78 @@
         <view
             v-for="(item, index) in currentMessages"
             :key="item.msgId || index"
-            :class="[
-            'msg-item',
-            item.fromUser === userId ? 'msg-sent' : 'msg-received',
-            item.isOffline ? 'offline-msg' : '',
-            item.status === 'sending' ? 'msg-sending' : '',
-            item.status === 'failed' ? 'msg-failed' : '',
-            item.status === 'isRead' && item.fromUser === userId && item.type === 'private'
-              ? 'msg-isRead'
-              : ''
-          ]"
+            :class="['msg-item', item.fromUser === userId ? 'self' : 'friend']"
+            @click="msgClick(item)"
         >
-          <view class="msg-nickname">{{ item.nickname || item.fromUser }}</view>
-          <view class="msg-content">{{ item.content }}</view>
-          <view class="msg-timestamp">{{ formatTimestamp(item.timestamp) }}</view>
+          <!-- 接收方头像（左侧）-->
+          <image
+              v-if="item.fromUser !== userId"
+              :src="item.avatar || friendAvatar"
+              class="avatar"
+              mode="widthFix"
+          />
 
           <view v-if="item.fromUser === userId && item.type === 'private'" class="msg-status">
-            <text v-if="item.status === 'sending'">发送中...</text>
-            <text v-else-if="item.status === 'failed'">
-              <button @click="retrySend(item)">重试</button>
-            </text>
-            <text v-else-if="item.status === 'success'">未读</text>
-            <text v-else-if="item.status === 'isRead'">已读</text>
+            <text v-if="item.status === 'sending'">…</text>
+            <text v-else-if="item.status === 'failed'">!</text>
+            <text v-else-if="item.status === 'success'">✔</text>
+            <text v-else-if="item.status === 'isRead'">✔✔</text>
           </view>
-        </view>
 
+          <!-- 消息内容 -->
+          <view class="msg-content" v-if="item.messageType === 'text'">
+            {{ item.content }}
+            <view class="msg-timestamp">{{ formatTimestamp(item.timestamp) }}</view>
+          </view>
+
+          <view class="msg-content" v-else-if="item.messageType==='image'">
+            <image :src="item.content" mode="widthFix" class="msg-image" @click="previewImage(item.content)" />
+          </view>
+
+          <view class="msg-content" v-else-if="item.messageType==='voice'">
+            <button class="msg-voice-btn">
+              {{ item.content || '播放语音' }}
+            </button>
+          </view>
+
+          <!-- 发送方头像（右侧）-->
+          <image
+              v-if="item.fromUser === userId"
+              :src="item.avatar || selfAvatar"
+              class="avatar"
+              mode="widthFix"
+          />
+
+
+        </view>
         <view v-if="loadingHistory" class="loading-tip">加载中...</view>
       </scroll-view>
 
-      <view class="chat-input-bar">
-        <input v-model="inputMsg" placeholder="输入消息..." class="msg-input" />
-        <button @click="sendMsg">发送</button>
-      </view>
     </view>
+
+      <!-- 固定底部输入栏 -->
+      <view class="chat-input-bar">
+        <block v-if="messageType === 'text'">
+          <image src="/static/icons/voice.png" mode="widthFix" class="left-icon" @click="messageType='voice'" />
+          <input type="text" v-model="inputMsg" class="msg-input" @confirm="sendMsg" />
+          <image src="/static/icons/album.png" mode="widthFix" class="thumb" @click="chooseImage" />
+        </block>
+
+        <block v-else-if="messageType === 'voice'">
+          <image src="/static/icons/text.png" class="left-icon" @click="messageType='text'" />
+          <text class="voice-crl" @touchstart="touchstart" @touchend="touchend">
+            {{ recordStart ? '松开 发送' : '按住 说话' }}
+          </text>
+        </block>
+      </view>
+
+      <!-- 语音录制动画 & 表情面板保持原有 -->
+      <view v-if="recordStart" class="audio-animation">
+        <view class="audio-wave">
+          <text class="audio-wave-text" v-for="item in 10" :style="{'animation-delay': `${item/10}s`}"></text>
+          <view class="text">松开 发送</view>
+      </view>
+      </view>
   </view>
 </template>
 
@@ -72,18 +110,23 @@ import {
 
 } from '@/utils/socket.js'
 
+const recorderManager = wx.getRecorderManager()
+
 export default {
   data() {
     return {
       privateMessages: {},   // { targetId: [msg1, msg2, ...] }
       groupMessages: {},     // { groupId: [msg1, msg2, ...] }
+      messageType: 'text',
+      recordStart: false,
       inputMsg: '',
       msgStatusMap:{},
       userId: '',
       targetId: '',
       targetType: '',
       currentTargetName: '',
-      currentTargetAvatar: '',
+      selfAvatar: uni.getStorageSync('currentUserAvatar') || '', // 登录时存的头像 key
+      friendAvatar: '', // 会在 onLoad 里根据 target 赋值
       connectionStatus: '未连接',
       scrollTop: 0,
       groupPageNum: 1,
@@ -113,10 +156,11 @@ export default {
   onLoad(options) {
     console.log('进入聊天页:', options)
     this.userId = uni.getStorageSync('currentUserId') || ''
+    this.selfAvatar = uni.getStorageSync('currentUserAvatar') || this.selfAvatar || '/static/default-avatar/yang.png'
     this.targetId = options.targetId
     this.targetType = options.type
     this.currentTargetName = options.name || ''
-    this.currentTargetAvatar = options.avatar || ''
+    this.friendAvatar = options.avatar || this.friendAvatar || '/static/default-avatar/helanzhu.png'
 
 
     if (this.targetType === 'private') this.$set(this.privateMessages, this.targetId, [])
@@ -199,7 +243,8 @@ export default {
               this.privateMessages[this.targetId].push({
                 ...m,
                 isOffline: true,
-                status: 'success'
+                status: 'success',
+                messageType:m.messageType||'text'
               });
             });
 
@@ -248,8 +293,6 @@ export default {
       type: this.targetType
     });
 
-
-
     unregisterCmdHandler(2, this.handleSocketMessage)
     unregisterCmdHandler(3, this.handleSocketMessage)
     unregisterCmdHandler(103)
@@ -262,6 +305,11 @@ export default {
   },
 
 
+  onHide() {
+    if (this._innerAudioContext) {
+      this._innerAudioContext.stop()
+    }
+  },
   methods: {
     /** 处理 socket 收到的消息 */
     handleSocketMessage(msg) {
@@ -277,7 +325,7 @@ export default {
         // 去重
         const exists = this.privateMessages[peerId].some(m => m.msgId === msg.msgId)
         if (!exists) {
-          this.privateMessages[peerId].push({...msg, isOffline: false, status: msg.status || 'success'})
+          this.privateMessages[peerId].push({...msg, isOffline: false, status: msg.status || 'success', messageType: msg.messageType || 'text'})
         }
 
         // 当前正在聊天的私聊窗口，滚动到底部
@@ -302,7 +350,7 @@ export default {
         // 处理补发的消息和普通群消息一致
         const existed = this.groupMessages[gid].some(m => m.msgId === msg.msgId)
         if (!existed) {
-          this.groupMessages[gid].push({ ...msg, isOffline: false, type: 'group' })
+          this.groupMessages[gid].push({ ...msg, isOffline: false, type: 'group', messageType: msg.messageType || 'text'})
         }
         // 如果当前就是打开窗口
         if (this.targetType === 'group' && this.targetId === gid) {
@@ -312,8 +360,6 @@ export default {
             this.scrollTop = 100000
           })
         }
-
-        return
       }
     },
 
@@ -328,7 +374,8 @@ export default {
         content: this.inputMsg,
         timestamp: Date.now(),
         type: this.targetType,
-        status: 'sending'
+        status: 'sending',
+        messageType: 'text' // text / image / voice
       }
 
       const onStatusChange = (status) => {
@@ -405,7 +452,6 @@ export default {
         this.loadingPrivateHistory = true;
         this.privatePageNum += 1;
         sendPrivateHistoryRequest(this.targetId, this.privatePageNum, this.privatePageSize);
-        return;
       }
     },
 
@@ -440,6 +486,196 @@ export default {
       else sendGroupMsg(msg)
     },
 
+    chooseImage() {
+      uni.chooseImage({
+        // sourceType: 'album',
+        success: (res) => {
+          this.list.push({
+            content: res.tempFilePaths[0],
+            userType: 'self',
+            messageType: 'image',
+            avatar: this._selfAvatar
+          })
+          this.scrollToBottom()
+          // 模拟对方回复
+          setTimeout(() => {
+            this.list.push({
+              content: '风景好漂亮啊~',
+              userType: 'friend',
+              avatar: this._friendAvatar
+            })
+            this.scrollToBottom()
+          }, 1500)
+        }
+      })
+    },
+
+    scrollToBottom() {
+      this.top = this.list.length * 1000
+    },
+
+    msgClick(data) {
+      if (data.messageType === 'voice') {
+        if (this._innerAudioContext) {
+          this._innerAudioContext.stop()
+          this._innerAudioContext.src = data.audioSrc
+          this._innerAudioContext.play()
+          return
+        }
+        this.play(data.audioSrc)
+      }
+    },
+
+    authTips() {
+      uni.showModal({
+        title: '提示',
+        content: '您拒绝了麦克风权限，将导致功能不能正常使用，去设置权限？',
+        confirmText: '去设置',
+        cancelText: '取消',
+        success: (res) => {
+          if (res.confirm) {
+            uni.openSetting({
+              success: (res) => {
+                if (res.authSetting['scope.record']) {
+                  console.log("已授权麦克风");
+                  this._recordAuth = true
+                } else {
+                  // 未授权
+                  wx.showModal({
+                    title: '提示',
+                    content: '您未授权麦克风，功能将无法使用',
+                    showCancel: false,
+                    confirmText: '知道了'
+                  })
+                }
+              }
+            })
+          }
+        }
+      })
+    },
+
+    touchstart() {
+      //开始录音
+      const _permission = 'scope.record'
+      uni.getSetting({
+        success: (res) => {
+          // 判断是否有相关权限属性
+          if (res.authSetting.hasOwnProperty(_permission)) {
+            // 属性存在，且为false，用户拒绝过权限
+            if (!res.authSetting[_permission]) {
+              this.authTips()
+            } else {
+              // 已授权
+              this._recordAuth = true
+              // 开始录音
+              recorderManager.start()
+              recorderManager.onStart(() => {
+                this.recordStart = true
+              })
+
+              // 错误回调
+              recorderManager.onError((res) => {
+                console.log('recorder error', res)
+                uni.showToast({
+                  icon: 'none',
+                  title: '系统出错，请重试'
+                })
+                this.recordStart = false
+              })
+            }
+          } else {
+            // 属性不存在，需要授权
+            uni.authorize({
+              scope: _permission,
+              success: () => {
+                // 授权成功
+                this._recordAuth = true
+              },
+              fail: (res) => {
+                /**
+                 * 104 未授权隐私协议
+                 * 用户可能拒绝官方隐私授权弹窗，为了避免过度弹窗打扰用户，开发者再次调用隐私相关接口时，
+                 * 若距上次用户拒绝不足10秒，将不再触发弹窗，直接给到开发者用户拒绝隐私授权弹窗的报错
+                 */
+                if (res.error == 104) {
+                  uni.showModal({
+                    title: '温馨提示',
+                    content: '您拒绝了隐私协议，请稍后再试',
+                    confirmText: '知道了',
+                    showCancel: false,
+                    success: () => {}
+                  })
+                } else {
+                  // 用户拒绝授权
+                  this.authTips()
+                }
+              }
+            })
+          }
+        }
+      })
+    },
+
+    touchend() {
+      if (!this._recordAuth || !this.recordStart) return
+      //停止录音
+      recorderManager.stop();
+      recorderManager.onStop((res) => {
+        console.log('结束录音', res)
+        const { duration, tempFilePath } = res
+        this.recordStart = false
+
+        // 确保目标数组已初始化
+        const peerId = this.targetId;
+        if (!this.privateMessages[peerId]) this.$set(this.privateMessages, peerId, []);
+
+        // 生成统一消息对象
+        const msg = {
+          msgId: 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          fromUser: this.userId,
+          toUser: peerId,
+          content: `语音 ${Math.round(duration / 1000)}''`,
+          audioSrc: tempFilePath,
+          timestamp: Date.now(),
+          type: 'private',
+          messageType: 'voice',
+          status: 'sending',  // 默认 sending
+          isOffline: false
+        }
+
+        // push 到消息数组
+        this.privateMessages[peerId].push(msg)
+
+        // 调用发送函数（把语音文件上传或发到 socket）
+        sendMsg(msg, (status) => {
+          msg.status = status
+        })
+
+        // 滚动到底部
+        this.$nextTick(() => {
+          this.scrollTop = 100000
+        })
+      })
+    },
+
+    //播放声音
+    play(src) {
+      this._innerAudioContext = wx.createInnerAudioContext()
+      this._innerAudioContext.src = src
+      this._innerAudioContext.play()
+      this._innerAudioContext.onPlay(() => {
+        console.log('开始播放')
+      })
+      this._innerAudioContext.onEnded(() => {
+        // 播放完毕，清除音频链接
+        console.log('播放完毕');
+      })
+      this._innerAudioContext.onError((res) => {
+        console.log('audio play error', res)
+      })
+    },
+
     /** 合并私聊历史（把更早的消息放在数组前面） */
     mergePrivateHistory(arr) {
       if (!Array.isArray(arr) || arr.length === 0) {
@@ -456,7 +692,14 @@ export default {
 
       // 假设服务端按 create_time DESC 返回（最新在前）：
       // 为把历史“插到顶部（旧消息在前）”我们先 reverse，再concat
-      const toInsert = Array.from(arr).reverse().filter(m => m && m.msgId && !existed.has(m.msgId));
+      const toInsert = Array.from(arr)
+        .reverse()
+        .filter(m => m && m.msgId && !existed.has(m.msgId))
+        .map(m => ({
+          ...m,
+          messageType: m.messageType || 'text',
+          status: m.status || 'success'
+        }));
       this.privateMessages[peerId] = toInsert.concat(this.privateMessages[peerId]);
 
       // 如果返回条数 < pageSize 则说明没有更多
@@ -477,7 +720,6 @@ export default {
           }
         });
       }
-
     },
 
     /** 合并群聊历史 */
@@ -495,9 +737,15 @@ export default {
       arr.forEach(m => {
         if (m && m.msgId && !existed.has(m.msgId)) {
           console.log("[mergeGroupHistory] 插入新消息:", m);
-
-          this.groupMessages[gid].unshift(m); // type 已经在后端和 cmd=103 回调里加了
-        }else {
+          // Normalize message object as in mergePrivateHistory
+          this.groupMessages[gid].unshift({
+            ...m,
+            type: 'group',
+            messageType: m.messageType || 'text',
+            status: m.status || 'success',
+            isOffline: m.isOffline || false
+          });
+        } else {
           console.log("[mergeGroupHistory] 跳过重复或非法消息:", m);
         }
       });
@@ -517,98 +765,251 @@ export default {
       }
     })()
 
-
-
   },
 
-
 }
+
 </script>
 
-<style>
+<style lang="scss" scoped>
+
 .chat-container {
   display: flex;
+  flex-direction: column;
   height: 100vh;
+  background: $uni-bg-color-grey;
 }
 
+/* 注意：不要把 overflow: hidden 写在这里，会把 fixed 元素裁掉 */
 .chat-right {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  flex: 1;
 }
 
-.chat-header {
-  height: 50px;
-  line-height: 50px;
-  background: #f7f7f7;
-  border-bottom: 1px solid #e0e0e0;
-  padding: 0 10px;
-  font-weight: bold;
-}
 
+/* 消息列表：给底部留出输入栏高度（含安全区） */
 .msg-list {
   flex: 1;
-  padding: 10px;
+  padding: 20rpx;
   overflow-y: auto;
-  background-color: #fff;
+  background-color: $uni-bg-color;
+  box-sizing: border-box;
+  padding-bottom: 160rpx;
 }
 
+/* 单条消息 */
 .msg-item {
-  margin: 5px 0;
-  max-width: 70%;
-  padding: 8px 12px;
-  border-radius: 10px;
-  word-wrap: break-word;
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+  /* 默认左右排列由 template 的头像顺序控制 */
   position: relative;
-  padding-bottom: 18px;
 }
 
-/* 自己发的消息右对齐 */
-.msg-sent {
-  align-self: flex-end;
-  background-color: #DCF8C6;
+/* 头像 */
+.avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 10rpx;
+  object-fit: cover;
 }
 
-/* 对方消息左对齐 */
-.msg-received {
-  align-self: flex-start;
-  background-color: #FFF;
-  border: 1px solid #ddd;
+/* 气泡 */
+.msg-content {
+  max-width: 60vw;
+  padding: 16rpx 20rpx;
+  border-radius: $uni-border-radius-lg;
+  font-size: 28rpx;
+  line-height: 1.4;
+  word-wrap: break-word;
+  position: relative;
 }
 
-.msg-status {
-  position: absolute;
-  bottom: 2px;
-  right: 8px;
-  font-size: 11px;
-  color: #888;
+/* 时间 */
+.msg-timestamp {
+  font-size: $uni-font-size-sm;
+  color: #FFFFFF;
+  margin-top: 6rpx;
+}
+
+/* 接收方（左）*/
+.msg-item.friend {
+  justify-content: flex-start;
+
+  .avatar {
+    margin-right: 20rpx;
+  }
+
+  .msg-content {
+    background: $uni-bg-color-grey;
+    color: $uni-text-color;
+  }
+
+  .msg-content::after {
+    content: '';
+    position: absolute;
+    border: 12rpx solid transparent;
+    border-right: 12rpx solid $uni-bg-color-grey;
+    left: -12rpx;
+    top: 18rpx;
+  }
+}
+
+/* 发送方（右）*/
+.msg-item.self {
+  justify-content: flex-end;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+
+  .avatar {
+    margin-left: 20rpx;
+  }
+
+  .msg-status {
+    font-size: $uni-font-size-sm;
+    color: $uni-text-color-grey;
+    margin-right: 8rpx; // ✅ 与气泡之间留间距
+    align-self: flex-end; // ✅ 保证和气泡底部对齐
+  }
+
+  .msg-content {
+    background: $uni-color-primary;
+    color: $uni-text-color-inverse;
+  }
+
+  .msg-content::after {
+    content: '';
+    position: absolute;
+    border: 12rpx solid transparent;
+    border-left: 12rpx solid $uni-color-primary;
+    right: -12rpx;
+    top: 18rpx;
+  }
 }
 
+/* 底部固定输入栏 */
 .chat-input-bar {
+  position: fixed; /* 固定在底部 */
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  min-height: 120rpx; /* 最小高度 */
   display: flex;
-  height: 50px;
-  border-top: 1px solid #e0e0e0;
-  background: #f9f9f9;
   align-items: center;
-  padding: 0 10px;
+  background: #FFFFFF;
+  padding: 20rpx 24rpx 20rpx 40rpx;
+  box-sizing: border-box;
+  z-index: 999; /* 保证在 scroll-view 之上 */
+
+  /* iOS 安全区适配 */
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+
+  /* 左侧图标 */
+  .left-icon {
+    width: 56rpx;
+    height: 56rpx;
+    margin-right: 10rpx;
+  }
+
+  /* 输入框 & 语音控件 */
+  .msg-input,
+  .voice-crl {
+    flex: 1;
+    height: 70rpx;
+    background: #eee;
+    border-radius: 10rpx;
+    padding: 0 20rpx;
+    font-size: 28rpx;
+    margin-right: 30rpx;
+    box-sizing: border-box;
+  }
+
+  /* 右侧按钮 */
+  .thumb {
+    width: 64rpx;
+    height: 64rpx;
+  }
+
+  /* 语音控件文本样式 */
+  .voice-crl {
+    text-align: center;
+    line-height: 70rpx;
+    font-weight: bold;
+  }
 }
 
+
+/* 输入框样式 */
 .msg-input {
   flex: 1;
-  border: 1px solid #ccc;
-  border-radius: 20px;
-  padding: 5px 10px;
+  border: 1px solid $uni-border-color;
+  border-radius: $uni-border-radius-lg;
+  padding: 10rpx 20rpx;
+  font-size: 28rpx;
+  background: $uni-bg-color-grey;
 }
 
-.chat-input-bar button {
-  margin-left: 10px;
-  padding: 5px 15px;
-  border-radius: 4px;
-  background-color: #2e89ff;
-  color: #fff;
+
+.msg-voice-btn {
+  border: none;
+  background: $uni-color-primary;
+  color: $uni-text-color-inverse;
+  padding: 6px 12px;
+  border-radius: $uni-border-radius-base;
+}
+
+.msg-image {
+  width: 150rpx;
+  height: auto;
+  border-radius: $uni-border-radius-lg;
+}
+
+.audio-animation {
+  position: fixed;
+  // width: 100vw;
+  // height: 100vh;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 202410;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  .text {
+    text-align: center;
+    font-size: 28rpx;
+    color: #333;
+    margin-top: 60rpx;
+  }
+
+  .audio-wave {
+    padding: 50rpx;
+
+    .audio-wave-text {
+      background-color: blue;
+      width: 7rpx;
+      height: 12rpx;
+      margin: 0 6rpx;
+      border-radius: 5rpx;
+      display: inline-block;
+      border: none;
+      animation: wave 0.25s ease-in-out;
+      animation-iteration-count: infinite;
+      animation-direction: alternate;
+    }
+
+    /*  声波动画  */
+    @keyframes wave {
+      from {
+        transform: scaleY(1);
+      }
+
+      to {
+        transform: scaleY(4);
+      }
+    }
+  }
 }
 </style>

@@ -69,11 +69,11 @@ const _sfc_main = {
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return common_vendor.e({
-    a: common_assets._imports_0$2,
+    a: common_assets._imports_0$3,
     b: common_vendor.o((...args) => $options.gotoCreateGroup && $options.gotoCreateGroup(...args)),
-    c: common_assets._imports_1$1,
+    c: common_assets._imports_1$2,
     d: common_vendor.o((...args) => $options.gotoJoinGroup && $options.gotoJoinGroup(...args)),
-    e: common_assets._imports_2$1,
+    e: common_assets._imports_2$2,
     f: common_vendor.o((...args) => $options.gotoGroupRequest && $options.gotoGroupRequest(...args)),
     g: $data.groups.length === 0
   }, $data.groups.length === 0 ? {} : {}, {

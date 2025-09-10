@@ -1,78 +1,228 @@
-
-.chat-container {
-  display: flex;
-  height: 100vh;
-}
-.chat-right {
+/* 水平间距 */
+/* 边框颜色 */
+/* 水平间距 */
+/* 文字基本颜色 */
+/* 文字尺寸 */
+/* 图片尺寸 */
+/* Border Radius */
+/* 水平间距 */
+/* 垂直间距 */
+/* 透明度 */
+/* 文章场景相关 */
+.chat-container.data-v-0a633310 {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  height: 100vh;
+  background: #f8f8f8;
 }
-.chat-header {
-  height: 50px;
-  line-height: 50px;
-  background: #f7f7f7;
-  border-bottom: 1px solid #e0e0e0;
-  padding: 0 10px;
+
+/* 注意：不要把 overflow: hidden 写在这里，会把 fixed 元素裁掉 */
+.chat-right.data-v-0a633310 {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 消息列表：给底部留出输入栏高度（含安全区） */
+.msg-list.data-v-0a633310 {
+  flex: 1;
+  padding: 20rpx;
+  overflow-y: auto;
+  background-color: #ffffff;
+  box-sizing: border-box;
+  padding-bottom: 160rpx;
+}
+
+/* 单条消息 */
+.msg-item.data-v-0a633310 {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+  /* 默认左右排列由 template 的头像顺序控制 */
+  position: relative;
+}
+
+/* 头像 */
+.avatar.data-v-0a633310 {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 10rpx;
+  object-fit: cover;
+}
+
+/* 气泡 */
+.msg-content.data-v-0a633310 {
+  max-width: 60vw;
+  padding: 16rpx 20rpx;
+  border-radius: 6px;
+  font-size: 28rpx;
+  line-height: 1.4;
+  word-wrap: break-word;
+  position: relative;
+}
+
+/* 时间 */
+.msg-timestamp.data-v-0a633310 {
+  font-size: 12px;
+  color: #FFFFFF;
+  margin-top: 6rpx;
+}
+
+/* 接收方（左）*/
+.msg-item.friend.data-v-0a633310 {
+  justify-content: flex-start;
+}
+.msg-item.friend .avatar.data-v-0a633310 {
+  margin-right: 20rpx;
+}
+.msg-item.friend .msg-content.data-v-0a633310 {
+  background: #f8f8f8;
+  color: #333;
+}
+.msg-item.friend .msg-content.data-v-0a633310::after {
+  content: "";
+  position: absolute;
+  border: 12rpx solid transparent;
+  border-right: 12rpx solid #f8f8f8;
+  left: -12rpx;
+  top: 18rpx;
+}
+
+/* 发送方（右）*/
+.msg-item.self.data-v-0a633310 {
+  justify-content: flex-end;
+  display: flex;
+  align-items: flex-end;
+}
+.msg-item.self .avatar.data-v-0a633310 {
+  margin-left: 20rpx;
+}
+.msg-item.self .msg-status.data-v-0a633310 {
+  font-size: 12px;
+  color: #999;
+  margin-right: 8rpx;
+  align-self: flex-end;
+}
+.msg-item.self .msg-content.data-v-0a633310 {
+  background: #007aff;
+  color: #fff;
+}
+.msg-item.self .msg-content.data-v-0a633310::after {
+  content: "";
+  position: absolute;
+  border: 12rpx solid transparent;
+  border-left: 12rpx solid #007aff;
+  right: -12rpx;
+  top: 18rpx;
+}
+
+/* 底部固定输入栏 */
+.chat-input-bar.data-v-0a633310 {
+  position: fixed;
+  /* 固定在底部 */
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  min-height: 120rpx;
+  /* 最小高度 */
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  padding: 20rpx 24rpx 20rpx 40rpx;
+  box-sizing: border-box;
+  z-index: 999;
+  /* 保证在 scroll-view 之上 */
+  /* iOS 安全区适配 */
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  /* 左侧图标 */
+  /* 输入框 & 语音控件 */
+  /* 右侧按钮 */
+  /* 语音控件文本样式 */
+}
+.chat-input-bar .left-icon.data-v-0a633310 {
+  width: 56rpx;
+  height: 56rpx;
+  margin-right: 10rpx;
+}
+.chat-input-bar .msg-input.data-v-0a633310,
+.chat-input-bar .voice-crl.data-v-0a633310 {
+  flex: 1;
+  height: 70rpx;
+  background: #eee;
+  border-radius: 10rpx;
+  padding: 0 20rpx;
+  font-size: 28rpx;
+  margin-right: 30rpx;
+  box-sizing: border-box;
+}
+.chat-input-bar .thumb.data-v-0a633310 {
+  width: 64rpx;
+  height: 64rpx;
+}
+.chat-input-bar .voice-crl.data-v-0a633310 {
+  text-align: center;
+  line-height: 70rpx;
   font-weight: bold;
 }
-.msg-list {
-  flex: 1;
-  padding: 10px;
-  overflow-y: auto;
-  background-color: #fff;
-}
-.msg-item {
-  margin: 5px 0;
-  max-width: 70%;
-  padding: 8px 12px;
-  border-radius: 10px;
-  word-wrap: break-word;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  padding-bottom: 18px;
-}
 
-/* 自己发的消息右对齐 */
-.msg-sent {
-  align-self: flex-end;
-  background-color: #DCF8C6;
-}
-
-/* 对方消息左对齐 */
-.msg-received {
-  align-self: flex-start;
-  background-color: #FFF;
-  border: 1px solid #ddd;
-}
-.msg-status {
-  position: absolute;
-  bottom: 2px;
-  right: 8px;
-  font-size: 11px;
-  color: #888;
-  display: flex;
-  align-items: center;
-}
-.chat-input-bar {
-  display: flex;
-  height: 50px;
-  border-top: 1px solid #e0e0e0;
-  background: #f9f9f9;
-  align-items: center;
-  padding: 0 10px;
-}
-.msg-input {
+/* 输入框样式 */
+.msg-input.data-v-0a633310 {
   flex: 1;
-  border: 1px solid #ccc;
-  border-radius: 20px;
-  padding: 5px 10px;
+  border: 1px solid #c8c7cc;
+  border-radius: 6px;
+  padding: 10rpx 20rpx;
+  font-size: 28rpx;
+  background: #f8f8f8;
 }
-.chat-input-bar button {
-  margin-left: 10px;
-  padding: 5px 15px;
-  border-radius: 4px;
-  background-color: #2e89ff;
+.msg-voice-btn.data-v-0a633310 {
+  border: none;
+  background: #007aff;
   color: #fff;
+  padding: 6px 12px;
+  border-radius: 3px;
+}
+.msg-image.data-v-0a633310 {
+  width: 150rpx;
+  height: auto;
+  border-radius: 6px;
+}
+.audio-animation.data-v-0a633310 {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 202410;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.audio-animation .text.data-v-0a633310 {
+  text-align: center;
+  font-size: 28rpx;
+  color: #333;
+  margin-top: 60rpx;
+}
+.audio-animation .audio-wave.data-v-0a633310 {
+  padding: 50rpx;
+  /*  声波动画  */
+}
+.audio-animation .audio-wave .audio-wave-text.data-v-0a633310 {
+  background-color: blue;
+  width: 7rpx;
+  height: 12rpx;
+  margin: 0 6rpx;
+  border-radius: 5rpx;
+  display: inline-block;
+  border: none;
+  animation: wave-0a633310 0.25s ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+@keyframes wave-0a633310 {
+from {
+    transform: scaleY(1);
+}
+to {
+    transform: scaleY(4);
+}
 }
