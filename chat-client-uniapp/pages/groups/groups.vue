@@ -151,4 +151,11 @@ export default {
 .list-item { display: flex; align-items: center; padding: 20rpx 0; border-bottom: 1px solid #f5f5f5; }
 .avatar { width: 80rpx; height: 80rpx; border-radius: 12rpx; margin-right: 20rpx; }
 .name { font-size: 30rpx; font-weight: 600; }
+
+.empty {
+  text-align: center;
+  color: #999;
+  font-size: 26rpx;
+  margin-top: 40rpx;
+}
 </style>

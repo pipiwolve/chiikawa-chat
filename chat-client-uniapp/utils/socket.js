@@ -17,13 +17,13 @@ let onReplayGroupHistory = null;
 let onJoinGroup = null;
 let onPrivateHistory = null;
 
-export function connectSocket(userId, onMessage) {
+export function connectSocket(userId, token, onMessage) {
     if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING) return;
 
     currentUserId = userId;
     connectStatus = CONNECT_STATUS.CONNECTING;
 
-    const wsUrl = `ws://172.21.67.11:9326`;
+    const wsUrl = `ws://172.21.67.11:9326?userId=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`;
 
     try {
         socketTask = uni.connectSocket({

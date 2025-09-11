@@ -1,6 +1,6 @@
 package org.tio.chat.service;
 
-import lombok.var;
+
 import org.apache.ibatis.session.SqlSession;
 import org.tio.chat.mapper.ChatMessageMapper;
 import org.tio.chat.mapper.ChatGroupMapper;

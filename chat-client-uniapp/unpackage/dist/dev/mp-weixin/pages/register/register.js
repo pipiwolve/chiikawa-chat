@@ -17,24 +17,28 @@ const _sfc_main = {
         this.status = "请输入完整信息";
         return;
       }
-      if (!this.socketConnected) {
-        utils_socket.connectSocket(this.userId, (msg) => {
-          common_vendor.index.__f__("log", "at pages/register/register.vue:40", "[WS] 收到消息:", msg);
-          if (msg.cmd === 10 && msg.result === "ok") {
+      common_vendor.index.request({
+        url: "http://localhost:8080/api/auth/register",
+        method: "POST",
+        data: {
+          userId: this.userId,
+          password: this.password,
+          nickname: this.nickname
+        },
+        success: (res) => {
+          if (res.data.result === "ok") {
             this.status = "注册成功，跳转登录...";
             common_vendor.index.redirectTo({ url: "/pages/login/login" });
-          } else if (msg.cmd === 10 && msg.result === "fail") {
+          } else {
             this.status = "注册失败，用户名可能已存在";
           }
-        });
-        this.socketConnected = true;
-      }
-      utils_socket.sendRegister(this.userId, this.password, this.nickname);
+        }
+      });
       utils_socket.setReadAckHandler((msgIds) => {
-        common_vendor.index.__f__("log", "at pages/register/register.vue:58", "[已读回执]", msgIds);
+        common_vendor.index.__f__("log", "at pages/register/register.vue:74", "[已读回执]", msgIds);
       });
       utils_socket.setGroupHistoryHandler((history) => {
-        common_vendor.index.__f__("log", "at pages/register/register.vue:61", "[群历史]", history);
+        common_vendor.index.__f__("log", "at pages/register/register.vue:77", "[群历史]", history);
       });
       this.status = "注册请求已发送...";
     },

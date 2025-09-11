@@ -17,12 +17,12 @@ let connectStatus = CONNECT_STATUS.DISCONNECTED;
 let onReplayGroupHistory = null;
 let onJoinGroup = null;
 let onPrivateHistory = null;
-function connectSocket(userId, onMessage) {
+function connectSocket(userId, token, onMessage) {
   if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING)
     return;
   currentUserId = userId;
   connectStatus = CONNECT_STATUS.CONNECTING;
-  const wsUrl = `ws://172.21.67.11:9326`;
+  const wsUrl = `ws://172.21.67.11:9326?userId=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`;
   try {
     socketTask = common_vendor.index.connectSocket({
       url: wsUrl,
@@ -209,12 +209,6 @@ function dispatchMessage(cmd, data) {
       }
     });
   }
-}
-function sendRegister(userId, password, nickname) {
-  sendCmdMessage(10, { fromUser: userId, content: password, nickname });
-}
-function sendLogin(userId, password) {
-  sendCmdMessage(11, { fromUser: userId, content: password });
 }
 function fetchSessions(onResult) {
   registerCmdHandler(200, onResult);
@@ -422,11 +416,9 @@ exports.sendGroupCursor = sendGroupCursor;
 exports.sendGroupHistoryRequest = sendGroupHistoryRequest;
 exports.sendGroupMsg = sendGroupMsg;
 exports.sendJoinGroupRequest = sendJoinGroupRequest;
-exports.sendLogin = sendLogin;
 exports.sendMsg = sendMsg;
 exports.sendPrivateHistoryRequest = sendPrivateHistoryRequest;
 exports.sendReadAck = sendReadAck;
-exports.sendRegister = sendRegister;
 exports.sendReplayGroupHistoryRequest = sendReplayGroupHistoryRequest;
 exports.setGroupHistoryHandler = setGroupHistoryHandler;
 exports.setJoinGroupHandler = setJoinGroupHandler;

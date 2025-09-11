@@ -9,8 +9,6 @@ public interface ChatUserMapper {
 
     int insertUser(ChatUser user);
 
-
-
     ChatUser findById(@Param("userId") String userId);
 
     ChatUser login(@Param("userId") String userId, @Param("password") String password);

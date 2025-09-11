@@ -16,28 +16,36 @@ const _sfc_main = {
         this.status = "请输入用户名和密码";
         return;
       }
-      if (!this.socketConnected) {
-        utils_socket.connectSocket(this.userId, (msg) => {
-          common_vendor.index.__f__("log", "at pages/login/login.vue:38", "[WS] 收到消息:", msg);
-          if (msg.cmd === 11 && msg.result === "ok") {
-            this.status = "登录成功，跳转中...";
+      common_vendor.index.request({
+        url: "http://localhost:8080/api/auth/login",
+        method: "POST",
+        data: {
+          userId: this.userId,
+          password: this.password
+        },
+        success: (res) => {
+          if (res.data.result === "ok") {
+            const token = res.data.token;
+            common_vendor.index.setStorageSync("token", token);
             common_vendor.index.setStorageSync("currentUserId", this.userId);
-            common_vendor.index.__f__("log", "at pages/login/login.vue:45", "当前绑定id", this.userId);
-            common_vendor.index.switchTab({
-              url: "/pages/sessions/sessions"
+            utils_socket.connectSocket(this.userId, token, (msg) => {
+              if (msg.result === "ok") {
+                this.status = "登录成功，跳转中...";
+                common_vendor.index.switchTab({ url: "/pages/sessions/sessions" });
+              } else if (msg.result === "fail") {
+                this.status = "登录失败，用户名或密码错误";
+              }
             });
-          } else if (msg.cmd === 11 && msg.result === "fail") {
-            this.status = "登录失败，用户名或密码错误";
+          } else {
+            this.status = res.data.message || "登录失败";
           }
-        });
-        this.socketConnected = true;
-      }
-      utils_socket.sendLogin(this.userId, this.password);
+        }
+      });
       utils_socket.setReadAckHandler((msgIds) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:64", "[已读回执]", msgIds);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:69", "[已读回执]", msgIds);
       });
       utils_socket.setGroupHistoryHandler((history) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:67", "[群历史]", history);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:72", "[群历史]", history);
       });
       this.status = "登录请求已发送...";
     },

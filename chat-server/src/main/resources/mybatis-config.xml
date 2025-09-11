@@ -23,6 +23,7 @@
         <mapper resource="mapper/FriendRequestMapper.xml"/>
         <mapper resource="mapper/GroupRequestMapper.xml"/>
 
+
     </mappers>
 
 </configuration>

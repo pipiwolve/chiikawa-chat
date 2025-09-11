@@ -32,32 +32,37 @@ export default {
         return
       }
 
-      // 建立 WebSocket 连接（如果未连接）
-      if (!this.socketConnected) {
-        connectSocket(this.userId, (msg) => {
-          console.log('[WS] 收到消息:', msg)
-
-          // 后端登录成功返回处理
-          if (msg.cmd === 11 && msg.result === 'ok') {
-            this.status = '登录成功，跳转中...'
-
+      // 调用 REST 登录
+      uni.request({
+        url: 'http://localhost:8080/api/auth/login',
+        method: 'POST',
+        data: {
+          userId: this.userId,
+          password: this.password
+        },
+        success: (res) => {
+          if (res.data.result === 'ok') {
+            const token = res.data.token
+            uni.setStorageSync('token', token)
             uni.setStorageSync('currentUserId', this.userId)
-            console.log('当前绑定id', this.userId)
+            // ✅ 使用 token 建立 WebSocket 连接（只调用一次）
+            connectSocket(this.userId, token, (msg) => {
 
-            // 跳转到消息中心 (tabbar 页面)
-            uni.switchTab({
-              url: '/pages/sessions/sessions'
+              if (msg.result === 'ok') {
+                this.status = '登录成功，跳转中...'
+                uni.switchTab({ url: '/pages/sessions/sessions' })
+              } else if (msg.result === 'fail') {
+                this.status = '登录失败，用户名或密码错误'
+              }
             })
-          } else if (msg.cmd === 11 && msg.result === 'fail') {
-            this.status = '登录失败，用户名或密码错误'
 
+          } else {
+            this.status = res.data.message || '登录失败'
           }
-        })
-        this.socketConnected = true
-      }
+        }
 
-      // 发送登录请求
-      sendLogin(this.userId, this.password)
+      })
+
 
       // 可选：监听已读回执和群历史消息
       setReadAckHandler((msgIds) => {

@@ -34,24 +34,40 @@ export default {
         return
       }
 
-      // 建立 WebSocket 连接（如果未连接）
-      if (!this.socketConnected) {
-        connectSocket(this.userId, (msg) => {
-          console.log('[WS] 收到消息:', msg)
-
-          // 后端注册成功返回处理
-          if (msg.cmd === 10 && msg.result === 'ok') {
+      // 发送注册请求
+      uni.request({
+        url: 'http://localhost:8080/api/auth/register',
+        method: 'POST',
+        data: {
+          userId: this.userId,
+          password: this.password,
+          nickname: this.nickname
+        },
+        success: (res) => {
+          if (res.data.result === 'ok'){
             this.status = '注册成功，跳转登录...'
             uni.redirectTo({url: '/pages/login/login'})
-          } else if (msg.cmd === 10 && msg.result === 'fail') {
+          } else {
             this.status = '注册失败，用户名可能已存在'
           }
-        })
-        this.socketConnected = true
-      }
+        }
+      })
+      // // 建立 WebSocket 连接（如果未连接）
+      // if (!this.socketConnected) {
+      //   connectSocket(this.userId, (msg) => {
+      //     console.log('[WS] 收到消息:', msg)
+      //
+      //     // 后端注册成功返回处理
+      //     if (msg.cmd === 10 && msg.result === 'ok') {
+      //       this.status = '注册成功，跳转登录...'
+      //       uni.redirectTo({url: '/pages/login/login'})
+      //     } else if (msg.cmd === 10 && msg.result === 'fail') {
+      //       this.status = '注册失败，用户名可能已存在'
+      //     }
+      //   })
+      //   this.socketConnected = true
+      // }
 
-      // 发送注册请求
-      sendRegister(this.userId, this.password, this.nickname)
 
       // 可选：监听已读回执和群历史消息
       setReadAckHandler((msgIds) => {

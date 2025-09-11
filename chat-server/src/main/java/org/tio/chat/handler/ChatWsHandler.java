@@ -1,5 +1,6 @@
 package org.tio.chat.handler;
 
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tio.chat.config.ChatServerConfig;
@@ -7,6 +8,7 @@ import org.tio.chat.constant.ChatConst;
 import org.tio.chat.model.*;
 import org.tio.chat.service.*;
 import org.tio.chat.util.JsonUtil;
+import org.tio.chat.util.JwtUtil;
 import org.tio.core.ChannelContext;
 import org.tio.core.Tio;
 import org.tio.http.common.HttpRequest;
@@ -48,6 +50,29 @@ public class ChatWsHandler implements IWsMsgHandler {
         String clientIp = request.getClientIp();
         log.info("新连接来自 [{}]", clientIp);
 
+        String token = request.getParam("token");
+        String userId = request.getParam("userId");
+
+        if (token == null || !JwtUtil.validate(token, userId)) {
+            log.warn("握手失败：userId={} token 校验不通过", userId);
+            return null; // ❌ 阻止握手
+        }
+
+
+        // ✅ token 校验通过，先做绑定
+        Tio.bindUser(channelContext, userId);
+        log.info("用户 [{}] 已通过 token 校验并绑定连接", userId);
+
+
+        //  绑定群组
+        List<String> groupIds = ChatGroupService.getUserGroupIds(userId);
+        if (groupIds != null) {
+            for (String gid : groupIds) {
+                Tio.bindGroup(channelContext, gid);
+                log.info("用户 [{}] 加入群组 [{}]", userId, gid);
+            }
+        }
+
         return httpResponse;
     }
 
@@ -61,7 +86,14 @@ public class ChatWsHandler implements IWsMsgHandler {
      */
     @Override
     public void onAfterHandshaked(HttpRequest httpRequest, HttpResponse httpResponse, ChannelContext channelContext) throws Exception {
-        log.info("握手完成，等待用户发送登录消息后再绑定 userId 和群组");
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("result", "ok"); // 或 "fail" 根据验证
+        result.put("message", "登录成功");
+        WsResponse resp = WsResponse.fromText(JsonUtil.toJson(result), ChatServerConfig.CHARSET);
+        Tio.send(channelContext, resp);
+
+        log.info("握手完成");
     }
 
 
