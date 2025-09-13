@@ -1,1 +1,1 @@
-<view class="index-container"><button bindtap="{{a}}">登录</button><button bindtap="{{b}}">注册</button></view>
+<image class="bg-image" src="{{a}}" mode="aspectFill"/><view class="index-container"><button bindtap="{{b}}">登录</button><button bindtap="{{c}}">注册</button></view>

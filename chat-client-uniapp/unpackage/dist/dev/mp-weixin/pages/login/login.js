@@ -1,6 +1,7 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
 const utils_socket = require("../../utils/socket.js");
+const common_assets = require("../../common/assets.js");
 const _sfc_main = {
   data() {
     return {
@@ -42,10 +43,10 @@ const _sfc_main = {
         }
       });
       utils_socket.setReadAckHandler((msgIds) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:69", "[已读回执]", msgIds);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:71", "[已读回执]", msgIds);
       });
       utils_socket.setGroupHistoryHandler((history) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:72", "[群历史]", history);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:74", "[群历史]", history);
       });
       this.status = "登录请求已发送...";
     },
@@ -56,13 +57,14 @@ const _sfc_main = {
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return {
-    a: $data.userId,
-    b: common_vendor.o(($event) => $data.userId = $event.detail.value),
-    c: $data.password,
-    d: common_vendor.o(($event) => $data.password = $event.detail.value),
-    e: common_vendor.o((...args) => $options.login && $options.login(...args)),
-    f: common_vendor.o((...args) => $options.goRegister && $options.goRegister(...args)),
-    g: common_vendor.t($data.status)
+    a: common_assets._imports_0$2,
+    b: $data.userId,
+    c: common_vendor.o(($event) => $data.userId = $event.detail.value),
+    d: $data.password,
+    e: common_vendor.o(($event) => $data.password = $event.detail.value),
+    f: common_vendor.o((...args) => $options.login && $options.login(...args)),
+    g: common_vendor.o((...args) => $options.goRegister && $options.goRegister(...args)),
+    h: common_vendor.t($data.status)
   };
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);

@@ -29,7 +29,7 @@ export default {
   data() {
     return {
       users: [],
-      defaultAvatar: '/static/default-avatar/helanzhu.png',
+      defaultAvatar: '/static/default-avatar/xiaoqi.png',
       userId: ''
     }
   },

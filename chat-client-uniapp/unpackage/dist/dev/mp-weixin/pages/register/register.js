@@ -1,6 +1,7 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
 const utils_socket = require("../../utils/socket.js");
+const common_assets = require("../../common/assets.js");
 const _sfc_main = {
   data() {
     return {
@@ -35,10 +36,10 @@ const _sfc_main = {
         }
       });
       utils_socket.setReadAckHandler((msgIds) => {
-        common_vendor.index.__f__("log", "at pages/register/register.vue:74", "[已读回执]", msgIds);
+        common_vendor.index.__f__("log", "at pages/register/register.vue:60", "[已读回执]", msgIds);
       });
       utils_socket.setGroupHistoryHandler((history) => {
-        common_vendor.index.__f__("log", "at pages/register/register.vue:77", "[群历史]", history);
+        common_vendor.index.__f__("log", "at pages/register/register.vue:63", "[群历史]", history);
       });
       this.status = "注册请求已发送...";
     },
@@ -49,15 +50,16 @@ const _sfc_main = {
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return {
-    a: $data.userId,
-    b: common_vendor.o(($event) => $data.userId = $event.detail.value),
-    c: $data.password,
-    d: common_vendor.o(($event) => $data.password = $event.detail.value),
-    e: $data.nickname,
-    f: common_vendor.o(($event) => $data.nickname = $event.detail.value),
-    g: common_vendor.o((...args) => $options.register && $options.register(...args)),
-    h: common_vendor.o((...args) => $options.goLogin && $options.goLogin(...args)),
-    i: common_vendor.t($data.status)
+    a: common_assets._imports_0$2,
+    b: $data.userId,
+    c: common_vendor.o(($event) => $data.userId = $event.detail.value),
+    d: $data.password,
+    e: common_vendor.o(($event) => $data.password = $event.detail.value),
+    f: $data.nickname,
+    g: common_vendor.o(($event) => $data.nickname = $event.detail.value),
+    h: common_vendor.o((...args) => $options.register && $options.register(...args)),
+    i: common_vendor.o((...args) => $options.goLogin && $options.goLogin(...args)),
+    j: common_vendor.t($data.status)
   };
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);

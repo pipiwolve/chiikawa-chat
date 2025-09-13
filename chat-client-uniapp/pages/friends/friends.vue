@@ -1,4 +1,5 @@
 <template>
+  <image class="bg-image" src="/static/background/friends_bg.png" mode="aspectFill"/>
   <view class="page">
 
     <!-- 功能入口 -->
@@ -111,6 +112,15 @@ export default {
 </script>
 
 <style scoped>
+.bg-image {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+
 .page {
   padding: 20rpx;
   background-color: #f5f5f5;

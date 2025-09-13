@@ -156,11 +156,11 @@ export default {
   onLoad(options) {
     console.log('进入聊天页:', options)
     this.userId = uni.getStorageSync('currentUserId') || ''
-    this.selfAvatar = uni.getStorageSync('currentUserAvatar') || this.selfAvatar || '/static/default-avatar/yang.png'
+    this.selfAvatar = uni.getStorageSync('currentUserAvatar') || this.selfAvatar || '/static/default-avatar/wusaqi.png'
     this.targetId = options.targetId
     this.targetType = options.type
     this.currentTargetName = options.name || ''
-    this.friendAvatar = options.avatar || this.friendAvatar || '/static/default-avatar/helanzhu.png'
+    this.friendAvatar = options.avatar || this.friendAvatar || '/static/default-avatar/xiaoqi.png'
 
 
     if (this.targetType === 'private') this.$set(this.privateMessages, this.targetId, [])

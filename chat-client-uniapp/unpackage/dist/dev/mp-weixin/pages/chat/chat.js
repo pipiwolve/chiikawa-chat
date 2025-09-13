@@ -49,11 +49,11 @@ const _sfc_main = {
   onLoad(options) {
     common_vendor.index.__f__("log", "at pages/chat/chat.vue:157", "进入聊天页:", options);
     this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
-    this.selfAvatar = common_vendor.index.getStorageSync("currentUserAvatar") || this.selfAvatar || "/static/default-avatar/yang.png";
+    this.selfAvatar = common_vendor.index.getStorageSync("currentUserAvatar") || this.selfAvatar || "/static/default-avatar/wusaqi.png";
     this.targetId = options.targetId;
     this.targetType = options.type;
     this.currentTargetName = options.name || "";
-    this.friendAvatar = options.avatar || this.friendAvatar || "/static/default-avatar/helanzhu.png";
+    this.friendAvatar = options.avatar || this.friendAvatar || "/static/default-avatar/xiaoqi.png";
     if (this.targetType === "private")
       this.$set(this.privateMessages, this.targetId, []);
     if (this.targetType === "group")
@@ -603,7 +603,7 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
     d: common_vendor.o((...args) => $options.loadMoreMessages && $options.loadMoreMessages(...args)),
     e: $data.messageType === "text"
   }, $data.messageType === "text" ? {
-    f: common_assets._imports_0,
+    f: common_assets._imports_0$1,
     g: common_vendor.o(($event) => $data.messageType = "voice"),
     h: common_vendor.o((...args) => $options.sendMsg && $options.sendMsg(...args)),
     i: $data.inputMsg,

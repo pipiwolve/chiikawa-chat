@@ -5,7 +5,7 @@ const _sfc_main = {
   data() {
     return {
       users: [],
-      defaultAvatar: "/static/default-avatar/helanzhu.png",
+      defaultAvatar: "/static/default-avatar/xiaoqi.png",
       userId: ""
     };
   },
