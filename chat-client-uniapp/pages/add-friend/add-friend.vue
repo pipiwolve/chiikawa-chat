@@ -51,45 +51,91 @@ export default {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+/* ================ 视觉变量 ================ */
+:root {
+  --theme-start: #6366f1;
+  --theme-end: #8b5cf6;
+  --bg: #f7f8fc;
+  --card: #ffffff;
+  --radius: 24rpx;
+  --shadow: 0 8rpx 30rpx rgba(0, 0, 0, .06);
+  --text-title: #1f2937;
+  --text-desc: #6b7280;
+  --ease: cubic-bezier(.4, .8, .2, 1);
+}
+
+/* ================ 页面骨架 ================ */
 .page {
-  padding: 30rpx;
-  background: #f5f5f5;
+  background: var(--bg);
   min-height: 100vh;
+  padding: 40rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
+
+/* ================ 卡片表单 ================ */
 .form {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 20rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.05);
-}
-.form-item {
-  margin-bottom: 20rpx;
-}
-.label {
-  font-size: 28rpx;
-  font-weight: bold;
-  margin-bottom: 12rpx;
-  display: block;
-}
-.input {
   width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 12rpx;
-  padding: 16rpx;
-  font-size: 28rpx;
+  max-width: 600rpx;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 40rpx;
+  box-sizing: border-box;
 }
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 36rpx;
+}
+
+.label {
+  font-size: 30rpx;
+  color: var(--text-desc);
+  margin-bottom: 12rpx;
+}
+
+.input {
+  height: 88rpx;
+  padding: 0 24rpx;
+  font-size: 32rpx;
+  color: var(--text-title);
+  border: 2rpx solid #e5e7eb;
+  border-radius: 12rpx;
+  transition: border-color .2s var(--ease);
+}
+.input:focus {
+  border-color: var(--theme-start);
+}
+
+/* ================ 渐变按钮 ================ */
 .submit-btn {
-  margin-top: 20rpx;
-  background: #07c160;
+  width: 100%;
+  height: 88rpx;
+  border: none;
+  border-radius: 12rpx;
+  background: linear-gradient(135deg, var(--theme-start), var(--theme-end));
   color: #fff;
   font-size: 32rpx;
-  padding: 20rpx;
-  border-radius: 12rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 16rpx rgba(7, 193, 96, .3);
+  transition: transform .15s var(--ease);
 }
+.submit-btn:active {
+  transform: scale(.96);
+}
+
+/* ================ 状态提示 ================ */
 .status {
-  margin-top: 20rpx;
+  margin-top: 40rpx;
   font-size: 28rpx;
-  color: #666;
+  color: var(--text-desc);
 }
 </style>

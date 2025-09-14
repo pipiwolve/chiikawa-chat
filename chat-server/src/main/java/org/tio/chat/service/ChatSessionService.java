@@ -40,6 +40,7 @@ public class ChatSessionService {
                 if (lastMsg != null) {
                     s.setLastMsg(lastMsg.getContent());
                     s.setLastTime(lastMsg.getCreateTime());
+                    s.setMessageType(lastMsg.getMessageType());
                 } else {
                     // 没消息，用群创建时间
                     s.setLastMsg(null);
@@ -55,7 +56,7 @@ public class ChatSessionService {
                 ChatMessage lastMsg = msgMapper.selectLastPrivateMessage(userId, u.getUserId());
                 ChatSession s = new ChatSession();
                 s.setSessionId(u.getUserId());
-                s.setNickname(u.getUserName() != null ? u.getUserName() : u.getUserId());
+                s.setNickname(u.getUserName());
                 s.setAvatar(u.getAvatar()); // 如果有头像
                 s.setType("private");
                 s.setUnread(msgMapper.countUnreadPrivateMessages(userId, u.getUserId()));
@@ -63,6 +64,7 @@ public class ChatSessionService {
                 if (lastMsg != null) {
                     s.setLastMsg(lastMsg.getContent());
                     s.setLastTime(lastMsg.getCreateTime());
+                    s.setMessageType(lastMsg.getMessageType());
                 } else {
                     s.setLastMsg(null);
                     s.setLastTime(null);

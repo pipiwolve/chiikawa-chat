@@ -1,5 +1,5 @@
 <template>
-  <image class="bg-image" src="/static/background/friends_bg.png" mode="aspectFill"/>
+  <image class="bg-image" src="/static/background/session.jpg" mode="aspectFill"/>
   <view class="page">
 
     <!-- 功能入口 -->
@@ -111,45 +111,101 @@ export default {
 
 </script>
 
-<style scoped>
-.bg-image {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
+<style lang="scss" scoped>
+/* ================ 视觉变量 ================ */
+:root {
+--theme: #07c160;
+--bg: #f7f8fc;
+--card: #ffffff;
+--radius: 24rpx;
+--shadow: 0 8rpx 30rpx rgba(0, 0, 0, .06);
+--text-title: #1f2937;
+--text-desc: #6b7280;
+--ease: cubic-bezier(.4, .8, .2, 1);
 }
 
+/* ================ 背景图 ================ */
+.bg-image {
+position: fixed;
+left: 0;
+top: 0;
+width: 100%;
+height: 100%;
+z-index: -1;
+}
+
+/* ================ 页面骨架 ================ */
 .page {
-  padding: 20rpx;
-  background-color: #f5f5f5;
-  min-height: 100vh;
+background: transparent;          /* 关键：让背景图露出来 */
+min-height: 100vh;
+padding: 40rpx;
+box-sizing: border-box;
 }
+
+/* ================ 功能卡片 ================ */
 .function-list {
-  background: #fff;
-  border-radius: 12rpx;
-  overflow: hidden;
+background: var(--card);
+border-radius: var(--radius);
+box-shadow: var(--shadow);
+overflow: hidden;
+margin-bottom: 30rpx;
 }
+
 .function-item {
-  display: flex;
-  align-items: center;
-  padding: 24rpx 20rpx;
-  border-bottom: 1px solid #eee;
+display: flex;
+align-items: center;
+padding: 30rpx;
+border-bottom: 2rpx solid #f2f2f2;
+transition: background-color .2s var(--ease);
 }
 .function-item:last-child {
-  border-bottom: none;
+border-bottom: none;
 }
-.icon {
-  width: 48rpx;
-  height: 48rpx;
-  margin-right: 20rpx;
+.function-item:active {
+background-color: #f8f8f8;
 }
-.label {
-  font-size: 30rpx;
-}
-.list-item { display: flex; align-items: center; padding: 20rpx 0; border-bottom: 1px solid #f5f5f5; }
-.avatar { width: 80rpx; height: 80rpx; border-radius: 12rpx; margin-right: 20rpx; }
-.nickname { font-size: 30rpx; font-weight: 600; }
 
+.icon {
+width: 48rpx;
+height: 48rpx;
+margin-right: 24rpx;
+flex-shrink: 0;
+}
+
+.label {
+font-size: 30rpx;
+color: var(--text-title);
+}
+
+/* ================ 好友列表 ================ */
+.list-item {
+display: flex;
+align-items: center;
+padding: 24rpx 0;
+margin-bottom: 16rpx;
+background: var(--card);
+border-radius: var(--radius);
+box-shadow: var(--shadow);
+transition: transform .15s var(--ease);
+}
+.list-item:active {
+transform: scale(.98);
+}
+
+.avatar {
+width: 88rpx;
+height: 88rpx;
+border-radius: 50%;
+margin-right: 24rpx;
+flex-shrink: 0;
+/* 黑边防遮挡 */
+//border: 4rpx solid #000;
+box-sizing: border-box;
+}
+
+.nickname {
+font-size: 32rpx;
+color: var(--text-title);
+font-weight: 500;
+}
 </style>

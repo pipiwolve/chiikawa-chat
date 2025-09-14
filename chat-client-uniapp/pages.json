@@ -9,7 +9,7 @@
 		{
 			"path": "pages/chat/chat",
 			"style": {
-				"navigationBarTitleText": "聊天"
+				"navigationBarTitleText": ""
 			}
 		},
 		{
@@ -71,6 +71,12 @@
 			"style": {
 				"navigationBarTitleText": "群聊申请处理"
 			}
+		},
+		{
+			"path": "pages/myself/myself",
+			"style": {
+				"navigationBarTitleText": "个人资料"
+			}
 		}
 
 	],
@@ -102,7 +108,15 @@
 				"text": "联系人",
 				"iconPath": "static/tabbar/friends.png",
 				"selectedIconPath": "static/tabbar/friends-active.png"
+			},
+			{
+				"pagePath": "pages/myself/myself",
+				"text": "个人资料",
+				"iconPath": "static/tabbar/myself.png",
+				"selectedIconPath": "static/tabbar/myself-active.png"
 			}
+
+
 		]
 	}
 }

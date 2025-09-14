@@ -2,7 +2,8 @@
 const common_vendor = require("../../common/vendor.js");
 const utils_socket = require("../../utils/socket.js");
 const common_assets = require("../../common/assets.js");
-const recorderManager = common_vendor.wx$1.getRecorderManager();
+const UPLOAD_URL = "http://localhost:8080/api/upload";
+let recorderManager = common_vendor.wx$1.getRecorderManager();
 const _sfc_main = {
   data() {
     return {
@@ -18,10 +19,8 @@ const _sfc_main = {
       targetId: "",
       targetType: "",
       currentTargetName: "",
-      selfAvatar: common_vendor.index.getStorageSync("currentUserAvatar") || "",
-      // 登录时存的头像 key
-      friendAvatar: "",
-      // 会在 onLoad 里根据 target 赋值
+      selfAvatar: common_vendor.index.getStorageSync("currentUserAvatar") || "/static/default-avatar/wusaqi.png",
+      friendAvatar: "/static/default-avatar/xiaoqi.png",
       connectionStatus: "未连接",
       scrollTop: 0,
       groupPageNum: 1,
@@ -33,7 +32,9 @@ const _sfc_main = {
       privatePageNum: 1,
       privatePageSize: 50,
       privateHasMore: true,
-      loadingPrivateHistory: false
+      loadingPrivateHistory: false,
+      // 内部使用
+      innerAudio: null
     };
   },
   computed: {
@@ -47,17 +48,52 @@ const _sfc_main = {
     }
   },
   onLoad(options) {
-    common_vendor.index.__f__("log", "at pages/chat/chat.vue:157", "进入聊天页:", options);
+    common_vendor.index.__f__("log", "at pages/chat/chat.vue:161", "进入聊天页:", options);
     this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
-    this.selfAvatar = common_vendor.index.getStorageSync("currentUserAvatar") || this.selfAvatar || "/static/default-avatar/wusaqi.png";
+    this.selfAvatar = common_vendor.index.getStorageSync("currentUserAvatar") || this.selfAvatar;
     this.targetId = options.targetId;
     this.targetType = options.type;
-    this.currentTargetName = options.name || "";
-    this.friendAvatar = options.avatar || this.friendAvatar || "/static/default-avatar/xiaoqi.png";
+    this.currentTargetName = options.name || options.nickname;
+    this.friendAvatar = options.avatar || this.friendAvatar;
+    common_vendor.index.setNavigationBarTitle({
+      title: this.currentTargetName || (this.targetType === "group" ? "群聊" : "聊天")
+    });
     if (this.targetType === "private")
       this.$set(this.privateMessages, this.targetId, []);
     if (this.targetType === "group")
       this.$set(this.groupMessages, this.targetId, []);
+    try {
+      recorderManager = common_vendor.index.getRecorderManager();
+      recorderManager.onStart(() => {
+      });
+      recorderManager.onStop(() => {
+      });
+      recorderManager.onError(() => {
+      });
+      recorderManager.onStart(() => {
+        this.recordStart = true;
+      });
+      recorderManager.onError((err) => {
+        common_vendor.index.__f__("error", "at pages/chat/chat.vue:190", "recorder error", err);
+        this.recordStart = false;
+        common_vendor.index.showToast({ icon: "none", title: "录音失败" });
+      });
+      recorderManager.onStop((res) => {
+        this.handleRecorderStop(res);
+      });
+    } catch (e) {
+      common_vendor.index.__f__("warn", "at pages/chat/chat.vue:200", "录音管理器初始化失败", e);
+    }
+    try {
+      this.innerAudio = common_vendor.index.createInnerAudioContext();
+      this.innerAudio.onEnded(() => {
+      });
+      this.innerAudio.onError((e) => {
+        common_vendor.index.__f__("error", "at pages/chat/chat.vue:207", "audio play error", e);
+      });
+    } catch (e) {
+      common_vendor.index.__f__("warn", "at pages/chat/chat.vue:209", "音频播放初始化失败", e);
+    }
     utils_socket.setGroupHistoryHandler((arr) => {
       this.loadingHistory = false;
       if (!Array.isArray(arr) || arr.length === 0) {
@@ -97,7 +133,7 @@ const _sfc_main = {
       });
     });
     utils_socket.setReadAckHandler((msgIds) => this.handleReadAck(Array.isArray(msgIds) ? msgIds : [msgIds]));
-    utils_socket.connectSocket(this.userId, (msg) => common_vendor.index.__f__("log", "at pages/chat/chat.vue:218", "[WS] 收到消息:", msg));
+    utils_socket.connectSocket(this.userId, (msg) => common_vendor.index.__f__("log", "at pages/chat/chat.vue:259", "[WS] 收到消息:", msg));
     utils_socket.onPrivateMessage((msg) => this.handleSocketMessage(msg));
     utils_socket.onGroupMessage((msg) => this.handleSocketMessage(msg));
     if (this.targetType === "private") {
@@ -172,7 +208,7 @@ const _sfc_main = {
   methods: {
     /** 处理 socket 收到的消息 */
     handleSocketMessage(msg) {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:316", "进入 handleSocketMessage:", msg);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:357", "进入 handleSocketMessage:", msg);
       if (msg.type === "private") {
         const peerId = msg.fromUser === this.userId ? msg.toUser : msg.fromUser;
         if (!this.privateMessages[peerId])
@@ -262,7 +298,7 @@ const _sfc_main = {
     collectUnreadMsgIds(ids, peerId) {
       if (!peerId)
         return;
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:420", "收集未读ID:", ids, "for peer:", peerId);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:461", "收集未读ID:", ids, "for peer:", peerId);
       if (!this.unreadMsgIdsBufferMap)
         this.unreadMsgIdsBufferMap = {};
       if (!this.unreadMsgIdsBufferMap[peerId])
@@ -299,6 +335,232 @@ const _sfc_main = {
         utils_socket.sendPrivateHistoryRequest(this.targetId, this.privatePageNum, this.privatePageSize);
       }
     },
+    chooseImage() {
+      common_vendor.index.chooseImage({
+        count: 1,
+        success: (res) => {
+          const localPath = res.tempFilePaths[0];
+          const msg = {
+            msgId: "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1e3),
+            fromUser: this.userId,
+            toUser: this.targetId,
+            content: "",
+            // 上传完成后填入 URL
+            timestamp: Date.now(),
+            type: this.targetType,
+            messageType: "image",
+            status: "uploading"
+          };
+          if (this.targetType === "private") {
+            if (!this.privateMessages[this.targetId])
+              this.$set(this.privateMessages, this.targetId, []);
+            this.privateMessages[this.targetId].push(msg);
+          } else {
+            if (!this.groupMessages[this.targetId])
+              this.$set(this.groupMessages, this.targetId, []);
+            this.groupMessages[this.targetId].push(msg);
+          }
+          this.$nextTick(() => {
+            this.scrollTop = 1e5;
+          });
+          this.uploadAndSendFile(msg, localPath);
+        },
+        fail: (err) => {
+          common_vendor.index.__f__("error", "at pages/chat/chat.vue:532", "chooseImage fail", err);
+        }
+      });
+    },
+    msgClick(item) {
+      if (!item)
+        return;
+      if (item.messageType === "image") {
+        common_vendor.index.previewImage({ urls: [item.content] });
+        return;
+      }
+      if (item.messageType === "voice") {
+        this.play(item);
+        return;
+      }
+    },
+    authTips() {
+      common_vendor.index.showModal({
+        title: "提示",
+        content: "您拒绝了麦克风权限，将导致功能不能正常使用，去设置权限？",
+        confirmText: "去设置",
+        cancelText: "取消",
+        success: (res) => {
+          if (res.confirm) {
+            common_vendor.index.openSetting({
+              success: (res2) => {
+                if (res2.authSetting["scope.record"]) {
+                  common_vendor.index.__f__("log", "at pages/chat/chat.vue:561", "已授权麦克风");
+                  this._recordAuth = true;
+                } else {
+                  common_vendor.wx$1.showModal({
+                    title: "提示",
+                    content: "您未授权麦克风，功能将无法使用",
+                    showCancel: false,
+                    confirmText: "知道了"
+                  });
+                }
+              }
+            });
+          }
+        }
+      });
+    },
+    /*************** 录音逻辑：touchstart / touchend 简洁调用 recorderManager ***************/
+    touchstart() {
+      if (this.recordStart)
+        return;
+      recorderManager.start({ format: "mp3", duration: 6e4 });
+      const _permission = "scope.record";
+      common_vendor.index.getSetting({
+        success: (res) => {
+          if (res.authSetting && res.authSetting[_permission] === false) {
+            this.authTips();
+            return;
+          }
+          const options = {
+            // small program: 默认格式 wx supports aac/mp3, 小程序平台格式请根据实际调整
+            format: "mp3",
+            duration: 6e4
+            // 最长 60s
+          };
+          try {
+            recorderManager.start(options);
+          } catch (e) {
+            common_vendor.index.__f__("error", "at pages/chat/chat.vue:601", "recorder start error", e);
+            common_vendor.index.showToast({ icon: "none", title: "无法开始录音" });
+          }
+        }
+      });
+    },
+    touchend() {
+      if (!recorderManager || !this.recordStart) {
+        return;
+      }
+      try {
+        recorderManager.stop();
+      } catch (e) {
+        common_vendor.index.__f__("error", "at pages/chat/chat.vue:616", "recorder stop error", e);
+      }
+    },
+    /*************** 录音停止后的处理：上传并发送 ***************/
+    handleRecorderStop(res) {
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:623", "录音结束：", res);
+      const { duration, tempFilePath } = res;
+      this.recordStart = false;
+      const peerId = this.targetId;
+      if (this.targetType !== "private" && this.targetType !== "group")
+        return;
+      if (this.targetType === "private" && !this.privateMessages[peerId])
+        this.$set(this.privateMessages, peerId, []);
+      if (this.targetType === "group" && !this.groupMessages[peerId])
+        this.$set(this.groupMessages, peerId, []);
+      const msg = {
+        msgId: "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1e3),
+        fromUser: this.userId,
+        toUser: peerId,
+        content: `语音 ${Math.round(duration / 1e3)}''`,
+        audioUrl: "",
+        // 上传后填充
+        timestamp: Date.now(),
+        type: this.targetType === "private" ? "private" : "group",
+        messageType: "voice",
+        status: "uploading",
+        duration: Math.round((duration || 0) / 1e3)
+      };
+      if (this.targetType === "private")
+        this.privateMessages[peerId].push(msg);
+      else
+        this.groupMessages[peerId].push(msg);
+      this.$nextTick(() => {
+        this.scrollTop = 1e5;
+      });
+      this.uploadAndSendFile(msg, tempFilePath);
+    },
+    /*************** 通用：上传本地文件并发送（图片 / 语音） ***************/
+    uploadAndSendFile(msg, localPath) {
+      const token = common_vendor.index.getStorageSync("token") || "";
+      common_vendor.index.uploadFile({
+        url: UPLOAD_URL,
+        filePath: localPath,
+        name: "file",
+        header: {
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
+        success: (uploadRes) => {
+          try {
+            const data = JSON.parse(uploadRes.data);
+            if (data && data.result === "ok" && data.url) {
+              if (msg.messageType === "voice") {
+                msg.audioUrl = data.url;
+                msg.content = `语音 ${msg.duration}''`;
+              } else {
+                msg.content = data.url;
+              }
+              msg.status = "sending";
+              const onStatus = (status) => {
+                msg.status = status;
+                this.$forceUpdate();
+              };
+              if (msg.type === "private") {
+                utils_socket.sendMsg(msg, onStatus);
+              } else {
+                msg.groupId = this.targetId;
+                utils_socket.sendGroupMsg(msg, onStatus);
+              }
+            } else {
+              msg.status = "failed";
+              common_vendor.index.__f__("error", "at pages/chat/chat.vue:695", "upload returned fail", uploadRes.data);
+              common_vendor.index.showToast({ icon: "none", title: "上传失败" });
+            }
+          } catch (e) {
+            msg.status = "failed";
+            common_vendor.index.__f__("error", "at pages/chat/chat.vue:700", "parse upload response error", e, uploadRes.data);
+          }
+        },
+        fail: (err) => {
+          msg.status = "failed";
+          common_vendor.index.__f__("error", "at pages/chat/chat.vue:705", "uploadFile fail", err);
+          common_vendor.index.showToast({ icon: "none", title: "上传失败" });
+        }
+      });
+    },
+    /*************** 播放音频（点击语音气泡） ***************/
+    play(item) {
+      const src = item.audioUrl;
+      if (!src) {
+        common_vendor.index.showToast({ icon: "none", title: "没有可播放音频" });
+        return;
+      }
+      this.innerAudio.offPlay();
+      this.innerAudio.offEnded();
+      this.innerAudio.offError();
+      try {
+        if (!this.innerAudio)
+          this.innerAudio = common_vendor.index.createInnerAudioContext();
+        this.innerAudio.stop();
+      } catch (e) {
+      }
+      this.innerAudio.src = src;
+      this.innerAudio.play();
+      this.innerAudio.onPlay(() => {
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:733", "audio play", src);
+      });
+      this.innerAudio.onEnded(() => {
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:734", "audio ended");
+      });
+    },
+    previewImage(url) {
+      common_vendor.index.previewImage({
+        urls: [url],
+        // 预览列表，可以放多张
+        current: url
+        // 当前预览的图片
+      });
+    },
     /** 工具方法 */
     disconnect() {
       closeSocket();
@@ -328,164 +590,6 @@ const _sfc_main = {
         utils_socket.sendMsg(msg);
       else
         utils_socket.sendGroupMsg(msg);
-    },
-    chooseImage() {
-      common_vendor.index.chooseImage({
-        // sourceType: 'album',
-        success: (res) => {
-          this.list.push({
-            content: res.tempFilePaths[0],
-            userType: "self",
-            messageType: "image",
-            avatar: this._selfAvatar
-          });
-          this.scrollToBottom();
-          setTimeout(() => {
-            this.list.push({
-              content: "风景好漂亮啊~",
-              userType: "friend",
-              avatar: this._friendAvatar
-            });
-            this.scrollToBottom();
-          }, 1500);
-        }
-      });
-    },
-    scrollToBottom() {
-      this.top = this.list.length * 1e3;
-    },
-    msgClick(data) {
-      if (data.messageType === "voice") {
-        if (this._innerAudioContext) {
-          this._innerAudioContext.stop();
-          this._innerAudioContext.src = data.audioSrc;
-          this._innerAudioContext.play();
-          return;
-        }
-        this.play(data.audioSrc);
-      }
-    },
-    authTips() {
-      common_vendor.index.showModal({
-        title: "提示",
-        content: "您拒绝了麦克风权限，将导致功能不能正常使用，去设置权限？",
-        confirmText: "去设置",
-        cancelText: "取消",
-        success: (res) => {
-          if (res.confirm) {
-            common_vendor.index.openSetting({
-              success: (res2) => {
-                if (res2.authSetting["scope.record"]) {
-                  common_vendor.index.__f__("log", "at pages/chat/chat.vue:540", "已授权麦克风");
-                  this._recordAuth = true;
-                } else {
-                  common_vendor.wx$1.showModal({
-                    title: "提示",
-                    content: "您未授权麦克风，功能将无法使用",
-                    showCancel: false,
-                    confirmText: "知道了"
-                  });
-                }
-              }
-            });
-          }
-        }
-      });
-    },
-    touchstart() {
-      const _permission = "scope.record";
-      common_vendor.index.getSetting({
-        success: (res) => {
-          if (res.authSetting.hasOwnProperty(_permission)) {
-            if (!res.authSetting[_permission]) {
-              this.authTips();
-            } else {
-              this._recordAuth = true;
-              recorderManager.start();
-              recorderManager.onStart(() => {
-                this.recordStart = true;
-              });
-              recorderManager.onError((res2) => {
-                common_vendor.index.__f__("log", "at pages/chat/chat.vue:579", "recorder error", res2);
-                common_vendor.index.showToast({
-                  icon: "none",
-                  title: "系统出错，请重试"
-                });
-                this.recordStart = false;
-              });
-            }
-          } else {
-            common_vendor.index.authorize({
-              scope: _permission,
-              success: () => {
-                this._recordAuth = true;
-              },
-              fail: (res2) => {
-                if (res2.error == 104) {
-                  common_vendor.index.showModal({
-                    title: "温馨提示",
-                    content: "您拒绝了隐私协议，请稍后再试",
-                    confirmText: "知道了",
-                    showCancel: false,
-                    success: () => {
-                    }
-                  });
-                } else {
-                  this.authTips();
-                }
-              }
-            });
-          }
-        }
-      });
-    },
-    touchend() {
-      if (!this._recordAuth || !this.recordStart)
-        return;
-      recorderManager.stop();
-      recorderManager.onStop((res) => {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:625", "结束录音", res);
-        const { duration, tempFilePath } = res;
-        this.recordStart = false;
-        const peerId = this.targetId;
-        if (!this.privateMessages[peerId])
-          this.$set(this.privateMessages, peerId, []);
-        const msg = {
-          msgId: "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1e3),
-          fromUser: this.userId,
-          toUser: peerId,
-          content: `语音 ${Math.round(duration / 1e3)}''`,
-          audioSrc: tempFilePath,
-          timestamp: Date.now(),
-          type: "private",
-          messageType: "voice",
-          status: "sending",
-          // 默认 sending
-          isOffline: false
-        };
-        this.privateMessages[peerId].push(msg);
-        utils_socket.sendMsg(msg, (status) => {
-          msg.status = status;
-        });
-        this.$nextTick(() => {
-          this.scrollTop = 1e5;
-        });
-      });
-    },
-    //播放声音
-    play(src) {
-      this._innerAudioContext = common_vendor.wx$1.createInnerAudioContext();
-      this._innerAudioContext.src = src;
-      this._innerAudioContext.play();
-      this._innerAudioContext.onPlay(() => {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:668", "开始播放");
-      });
-      this._innerAudioContext.onEnded(() => {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:672", "播放完毕");
-      });
-      this._innerAudioContext.onError((res) => {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:675", "audio play error", res);
-      });
     },
     /** 合并私聊历史（把更早的消息放在数组前面） */
     mergePrivateHistory(arr) {
@@ -521,17 +625,17 @@ const _sfc_main = {
     },
     /** 合并群聊历史 */
     mergeGroupHistory(arr) {
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:727", "[mergeGroupHistory] 进入, arr:", arr);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:823", "[mergeGroupHistory] 进入, arr:", arr);
       const gid = this.targetId;
       if (!this.groupMessages[gid] || !Array.isArray(this.groupMessages[gid])) {
-        common_vendor.index.__f__("log", "at pages/chat/chat.vue:730", "[mergeGroupHistory] 初始化 groupMessages[gid]");
+        common_vendor.index.__f__("log", "at pages/chat/chat.vue:826", "[mergeGroupHistory] 初始化 groupMessages[gid]");
         this.$set(this.groupMessages, gid, []);
       }
       const existed = new Set(this.groupMessages[gid].map((m) => m.msgId));
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:735", "[mergeGroupHistory] 已有消息 ID:", existed);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:831", "[mergeGroupHistory] 已有消息 ID:", existed);
       arr.forEach((m) => {
         if (m && m.msgId && !existed.has(m.msgId)) {
-          common_vendor.index.__f__("log", "at pages/chat/chat.vue:739", "[mergeGroupHistory] 插入新消息:", m);
+          common_vendor.index.__f__("log", "at pages/chat/chat.vue:835", "[mergeGroupHistory] 插入新消息:", m);
           this.groupMessages[gid].unshift({
             ...m,
             type: "group",
@@ -540,10 +644,10 @@ const _sfc_main = {
             isOffline: m.isOffline || false
           });
         } else {
-          common_vendor.index.__f__("log", "at pages/chat/chat.vue:749", "[mergeGroupHistory] 跳过重复或非法消息:", m);
+          common_vendor.index.__f__("log", "at pages/chat/chat.vue:845", "[mergeGroupHistory] 跳过重复或非法消息:", m);
         }
       });
-      common_vendor.index.__f__("log", "at pages/chat/chat.vue:752", "[mergeGroupHistory] 最终 groupMessages[gid]:", this.groupMessages[gid]);
+      common_vendor.index.__f__("log", "at pages/chat/chat.vue:848", "[mergeGroupHistory] 最终 groupMessages[gid]:", this.groupMessages[gid]);
       this.loadingHistory = false;
     },
     /** 防抖上报群游标 */
@@ -570,31 +674,33 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
       } : {}, {
         c: item.fromUser === $data.userId && item.type === "private"
       }, item.fromUser === $data.userId && item.type === "private" ? common_vendor.e({
-        d: item.status === "sending"
-      }, item.status === "sending" ? {} : item.status === "failed" ? {} : item.status === "success" ? {} : item.status === "isRead" ? {} : {}, {
-        e: item.status === "failed",
-        f: item.status === "success",
-        g: item.status === "isRead"
+        d: item.status === "uploading"
+      }, item.status === "uploading" ? {} : item.status === "sending" ? {} : item.status === "failed" ? {} : item.status === "success" ? {} : item.status === "isRead" ? {} : {}, {
+        e: item.status === "sending",
+        f: item.status === "failed",
+        g: item.status === "success",
+        h: item.status === "isRead"
       }) : {}, {
-        h: item.messageType === "text"
+        i: item.messageType === "text"
       }, item.messageType === "text" ? {
-        i: common_vendor.t(item.content),
-        j: common_vendor.t($options.formatTimestamp(item.timestamp))
+        j: common_vendor.t(item.content),
+        k: common_vendor.t($options.formatTimestamp(item.timestamp))
       } : item.messageType === "image" ? {
-        l: item.content,
-        m: common_vendor.o(($event) => _ctx.previewImage(item.content), item.msgId || index)
+        m: item.content,
+        n: common_vendor.o(($event) => $options.previewImage(item.content), item.msgId || index)
       } : item.messageType === "voice" ? {
-        o: common_vendor.t(item.content || "播放语音")
+        p: common_vendor.t(item.content || "播放语音"),
+        q: common_vendor.o(($event) => $options.play(item), item.msgId || index)
       } : {}, {
-        k: item.messageType === "image",
-        n: item.messageType === "voice",
-        p: item.fromUser === $data.userId
+        l: item.messageType === "image",
+        o: item.messageType === "voice",
+        r: item.fromUser === $data.userId
       }, item.fromUser === $data.userId ? {
-        q: item.avatar || $data.selfAvatar
+        s: item.avatar || $data.selfAvatar
       } : {}, {
-        r: item.msgId || index,
-        s: common_vendor.n(item.fromUser === $data.userId ? "self" : "friend"),
-        t: common_vendor.o(($event) => $options.msgClick(item), item.msgId || index)
+        t: item.msgId || index,
+        v: common_vendor.n(item.fromUser === $data.userId ? "self" : "friend"),
+        w: common_vendor.o(($event) => $options.msgClick(item), item.msgId || index)
       });
     }),
     b: $data.loadingHistory

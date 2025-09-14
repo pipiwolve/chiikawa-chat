@@ -3,6 +3,7 @@ package org.tio.chat.service;
 import org.springframework.stereotype.Service;
 import org.tio.chat.mapper.ChatJwtUserMapper;
 import org.tio.chat.model.ChatUser;
+import org.tio.chat.model.LoginResponse;
 import org.tio.chat.util.JwtUtil;
 
 @Service
@@ -26,10 +27,15 @@ public class AuthService {
         return JwtUtil.generateToken(userId);
     }
 
-    public String login(String userId, String password) {
+    public LoginResponse login(String userId, String password) {
         ChatUser user = userMapper.findByUserId(userId);
         if (user != null && user.getPassword().equals(password)) {
-            return JwtUtil.generateToken(userId);
+            LoginResponse resp = new LoginResponse();
+            resp.setToken(JwtUtil.generateToken(userId));
+            resp.setUserId(user.getUserId());
+            resp.setUsername(user.getUserName());
+            resp.setAvatar(user.getAvatar());
+            return resp;
         }
         return null;
     }

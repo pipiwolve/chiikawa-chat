@@ -8,9 +8,9 @@
     <!-- 插入一条消息 -->
     <insert id="insert" parameterType="org.tio.chat.model.ChatMessage">
         INSERT INTO chat_message
-        (msg_id, from_user, to_user, group_id, content, cmd, is_offline, create_time)
+        (msg_id, from_user, to_user, group_id, content, cmd, is_offline, create_time, message_type, extra)
         VALUES
-            (#{msgId}, #{fromUser}, #{toUser}, #{groupId}, #{content}, #{cmd}, #{isOffline}, NOW())
+            (#{msgId}, #{fromUser}, #{toUser}, #{groupId}, #{content}, #{cmd}, #{isOffline}, NOW(), #{messageType}, #{audioUrl})
     </insert>
 
     <!-- 标记某用户某对话的离线消息已投递 -->
@@ -48,13 +48,19 @@
     <!-- 获取和某用户有过私聊的用户对象 -->
     <select id="getPrivateChatUsers" resultType="org.tio.chat.model.ChatUser">
         SELECT DISTINCT
-            CASE
-                WHEN from_user = #{userId} THEN to_user
-                ELSE from_user
-                END AS userId
-        FROM chat_message
-        WHERE (from_user = #{userId} OR to_user = #{userId})
-          AND cmd = 2
+            u.user_id AS userId,
+            u.username AS userName
+        FROM chat_user u
+        WHERE u.user_id IN (
+            SELECT DISTINCT
+                CASE
+                    WHEN from_user = #{userId} THEN to_user
+                    ELSE from_user
+                    END
+            FROM chat_message
+            WHERE (from_user = #{userId} OR to_user = #{userId})
+              AND cmd = 2
+            );
     </select>
 
     <!-- 查询某个私聊对象的最后一条消息 -->
@@ -62,7 +68,9 @@
         SELECT from_user AS fromUser,
                to_user   AS toUser,
                content,
-               create_time AS createTime
+               create_time AS createTime,
+               message_type as messageType,
+               extra as audioUrl
         FROM chat_message
         WHERE ((from_user = #{userId} AND to_user = #{peerId})
             OR (from_user = #{peerId} AND to_user = #{userId}))
@@ -76,7 +84,9 @@
         SELECT  from_user AS fromUser,
                 to_user   AS toUser,
                 content,
-                create_time AS createTime
+                create_time AS createTime,
+                message_type as messageType,
+                extra as audioUrl
         FROM chat_message
         WHERE group_id = #{groupId} AND cmd = 3
         ORDER BY create_time DESC
@@ -95,7 +105,7 @@
 
     <!-- 查询离线私聊消息 -->
     <select id="selectOfflinePrivate" resultType="org.tio.chat.model.ChatMessage">
-        SELECT msg_id AS msgId, from_user AS fromUser, to_user AS toUser, content, create_time AS createTime
+        SELECT msg_id AS msgId, from_user AS fromUser, to_user AS toUser, content, create_time AS createTime, message_type as messageType, extra as audioUrl
         FROM chat_message
         WHERE to_user = #{userId}
           AND from_user = #{peerId}
@@ -112,7 +122,9 @@
                cmd,
                is_read AS isRead,
                is_offline AS isOffline,
-               create_time AS createTime
+               create_time AS createTime,
+               message_type as messageType,
+               extra as audioUrl
         FROM chat_message
         WHERE ((from_user = #{userId} AND to_user = #{peerId})
             OR (from_user = #{peerId} AND to_user = #{userId}))

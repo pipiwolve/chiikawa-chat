@@ -1,4 +1,5 @@
 <template>
+  <image class="bg-image" src="/static/background/session.jpg" mode="aspectFill"/>
   <view class="page">
     <!-- 最近会话列表 -->
     <view
@@ -16,7 +17,7 @@
           <text class="name">{{ item.nickname || item.name }}</text>
           <text class="time">{{ formatTime(item.lastTime) }}</text>
         </view>
-        <view class="txt">{{ item.lastMsg || '暂无消息' }}</view>
+        <view class="txt">{{ formatLastMsg(item) || '暂无消息' }}</view>
       </view>
     </view>
   </view>
@@ -113,10 +114,21 @@ export default {
     },
     // 点击会话进入聊天
     connect(item) {
-      let query = `?targetId=${item.sessionId}&type=${item.type}`
+      let query = `?targetId=${item.sessionId}&type=${item.type}&name=${item.nickname}`
       uni.navigateTo({
         url: '/pages/chat/chat' + query
       })
+    },
+
+    formatLastMsg(item) {
+      if (!item) return '暂无消息'
+      if (item.messageType === 'image') {
+        return '[图片]'
+      } else if (item.messageType === 'voice') {
+        return '[语音]'
+      } else {
+        return item.lastMsg || '暂无消息'
+      }
     },
     // 格式化时间
     formatTime(ts) {
@@ -142,61 +154,116 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  padding: 0 32rpx;
-  color: #333;
+/* ================ 视觉变量 ================ */
+$theme: #07c160;
+$bg: #f7f8fc;
+$card: #ffffff;
+$radius: 24rpx;
+$shadow: 0 8rpx 30rpx rgba(0, 0, 0, .06);
+$text-title: #1f2937;
+$text-desc: #6b7280;
+$ease: cubic-bezier(.4, .8, .2, 1);
+
+/* ================ 背景图 ================ */
+.bg-image {
+position: fixed;
+left: 0;
+top: 0;
+width: 100%;
+height: 100%;
+z-index: -1;
 }
 
-.list-item {
-  display: flex;
-  padding: 30rpx 0;
-  border-bottom: 1px solid #f7f8f9;
-  .avatar {
-    width: 90rpx;
-    height: 90rpx;
-    border-radius: 10rpx;
-    margin-right: 20rpx;
-    position: relative;
-    .round {
-      position: absolute;
-      width: 14rpx;
-      height: 14rpx;
-      border-radius: 50%;
-      background: #ef5656;
-      top: -4rpx;
-      right: -4rpx;
-      z-index: 1;
-    }
-    image {
-      width: 100%;
-      height: 100%;
-      border-radius: 10rpx;
-    }
-  }
-  .content {
-    flex: 1;
-    .title {
-      display: flex;
-      justify-content: space-between;
-      .name {
-        font-weight: bold;
-      }
-      .time {
-        color: #999;
-        font-size: 24rpx;
-      }
-    }
-    .txt {
-      margin-top: 10rpx;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      display: -webkit-box;
-      -webkit-line-clamp: 1;
-      -webkit-box-orient: vertical;
-      text-align: left;
-      color: #999;
-      font-size: 26rpx;
-    }
-  }
+/* ================ 页面骨架 ================ */
+.page {
+background: transparent; // 让背景图透出
+min-height: 100vh;
+padding: 40rpx;
+box-sizing: border-box;
 }
+
+/* ================ 会话卡片 ================ */
+.list-item {
+display: flex;
+align-items: center;
+padding: 24rpx;
+margin-bottom: 16rpx;
+background: $card;
+border-radius: $radius;
+box-shadow: $shadow;
+transition: transform .15s $ease;
+&:active {
+transform: scale(.98);
+}
+
+/* 头像容器 */
+.avatar {
+width: 96rpx;
+height: 96rpx;
+margin-right: 24rpx;
+position: relative;
+flex-shrink: 0;
+
+/* 黑边防遮挡 */
+image {
+width: 100%;
+height: 100%;
+border-radius: 50%;
+//border: 4rpx solid #000;
+box-sizing: border-box;
+}
+
+/* 未读红点 → 带数字小徽章 */
+.round {
+position: absolute;
+top: -8rpx;
+right: -8rpx;
+min-width: 32rpx;
+height: 32rpx;
+line-height: 32rpx;
+padding: 0 8rpx;
+border-radius: 16rpx;
+background: #ef5656;
+color: #fff;
+font-size: 22rpx;
+text-align: center;
+z-index: 1;
+}
+}
+
+/* 右侧内容 */
+.content {
+flex: 1;
+display: flex;
+flex-direction: column;
+
+.title {
+display: flex;
+justify-content: space-between;
+align-items: baseline;
+margin-bottom: 8rpx;
+
+.name {
+font-size: 32rpx;
+font-weight: 600;
+color: $text-title;
+}
+.time {
+font-size: 24rpx;
+color: $text-desc;
+}
+}
+
+.txt {
+font-size: 26rpx;
+color: $text-desc;
+overflow: hidden;
+text-overflow: ellipsis;
+display: -webkit-box;
+-webkit-line-clamp: 1;
+-webkit-box-orient: vertical;
+}
+}
+}
+
 </style>

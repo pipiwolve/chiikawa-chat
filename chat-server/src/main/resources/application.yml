@@ -2,7 +2,9 @@ server:
   port: 8080   # Spring Boot 服务端口（REST API 用）
   servlet:
     context-path: /api  # 统一接口前缀，可选
-
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 50MB
 spring:
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/chiikawa_chat?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
@@ -45,5 +47,13 @@ logging:
   level:
     root: INFO
     org.tio.chat: DEBUG
+    org.springframework.web.servlet.resource: DEBUG
+
   file:
     name: logs/chat-server-springboot.log
+
+chat:
+  upload:
+    local-path: /Users/Zhuanz/Documents/t-io/uploads   # 本地存储路径
+    url-prefix: http://172.21.67.11:8080/api/uploads/ # 文件访问URL前缀
+

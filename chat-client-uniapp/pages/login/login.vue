@@ -45,8 +45,12 @@ export default {
         success: (res) => {
           if (res.data.result === 'ok') {
             const token = res.data.token
+            const username = res.data.username
+            const avatar = res.data.avatar
             uni.setStorageSync('token', token)
             uni.setStorageSync('currentUserId', this.userId)
+            uni.setStorageSync('currentUserName', username || '')
+            uni.setStorageSync('currentUserAvatar', avatar || '/static/default-avatar/wusaqi.png')
             // ✅ 使用 token 建立 WebSocket 连接（只调用一次）
             connectSocket(this.userId, token, (msg) => {
 

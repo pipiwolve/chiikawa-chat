@@ -27,8 +27,12 @@ const _sfc_main = {
         success: (res) => {
           if (res.data.result === "ok") {
             const token = res.data.token;
+            const username = res.data.username;
+            const avatar = res.data.avatar;
             common_vendor.index.setStorageSync("token", token);
             common_vendor.index.setStorageSync("currentUserId", this.userId);
+            common_vendor.index.setStorageSync("currentUserName", username || "");
+            common_vendor.index.setStorageSync("currentUserAvatar", avatar || "/static/default-avatar/wusaqi.png");
             utils_socket.connectSocket(this.userId, token, (msg) => {
               if (msg.result === "ok") {
                 this.status = "登录成功，跳转中...";
@@ -43,10 +47,10 @@ const _sfc_main = {
         }
       });
       utils_socket.setReadAckHandler((msgIds) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:71", "[已读回执]", msgIds);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:75", "[已读回执]", msgIds);
       });
       utils_socket.setGroupHistoryHandler((history) => {
-        common_vendor.index.__f__("log", "at pages/login/login.vue:74", "[群历史]", history);
+        common_vendor.index.__f__("log", "at pages/login/login.vue:78", "[群历史]", history);
       });
       this.status = "登录请求已发送...";
     },

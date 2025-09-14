@@ -90,12 +90,6 @@ public class ChatService {
         }
     }
 
-    // -------------------- 绑定 --------------------
-    public static void bindUser(String userId, ChannelContext ctx) {
-        if (userId == null) return;
-        Tio.bindUser(ctx, userId);
-        Tio.bindGroup(ctx, ChatConst.GROUP_ID);
-    }
 
     // -------------------- 私聊 --------------------
     public static void sendPrivateMsg(ChatMessage chatMessage, ChannelContext ctx) {

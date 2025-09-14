@@ -79,7 +79,7 @@
     <!-- 查询某群在指定 msgId 之后的消息（用于回放） -->
     <select id="selectGroupMessagesSince" resultType="org.tio.chat.model.ChatMessage">
         SELECT id, msg_id as msgId, from_user as fromUser, to_user as toUser, group_id as groupId,
-               content, cmd, is_read as isRead, is_offline as isOffline, create_time as createTime
+               content, cmd, is_read as isRead, is_offline as isOffline, create_time as createTime, message_type as messageType, extra as audioUrl
         FROM chat_message
         WHERE group_id = #{groupId}
           AND cmd = 3
@@ -108,7 +108,8 @@
     <!-- 查询群聊历史消息，按创建时间倒序 -->
     <select id="selectGroupHistory" resultType="org.tio.chat.model.ChatMessage">
         <![CDATA[
-        SELECT msg_id AS msgId, from_user AS fromUser, to_user AS fromUser, group_id AS groupId, content, cmd, is_offline, create_time AS createTime
+        SELECT msg_id AS msgId, from_user AS fromUser, to_user AS fromUser, group_id AS groupId,
+               content, cmd, is_offline, create_time AS createTime, message_type as messageType, extra as audioUrl
         FROM chat_message
         WHERE group_id = #{groupId}
         AND create_time <= #{cursorTime}

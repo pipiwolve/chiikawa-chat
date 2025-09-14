@@ -14,6 +14,7 @@ if (!Math) {
   "./pages/friends-request/friends-request.js";
   "./pages/groups/groups.js";
   "./pages/group-requests/group-requests.js";
+  "./pages/myself/myself.js";
 }
 const _sfc_main = {
   onLaunch: function() {

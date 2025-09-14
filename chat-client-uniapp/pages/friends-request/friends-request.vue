@@ -80,84 +80,129 @@ export default {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+/* ================ 视觉变量 ================ */
+$theme-start: #07c160;
+$theme-end: #05a14a;
+$bg: #f7f8fc;
+$card: #ffffff;
+$radius: 24rpx;
+$shadow: 0 8rpx 30rpx rgba(0, 0, 0, .06);
+$text-title: #1f2937;
+$text-desc: #6b7280;
+$ease: cubic-bezier(.4, .8, .2, 1);
+
+/* ================ 页面骨架 ================ */
 .page {
-  padding: 20rpx;
-  background-color: #f5f5f5;
-  min-height: 100vh;
-}
-.page {
-  padding: 20rpx;
-  background-color: #f5f5f5;
-  min-height: 100vh;
-}
-.function-list {
-  background: #fff;
-  border-radius: 12rpx;
-  overflow: hidden;
-}
-.function-item {
-  display: flex;
-  align-items: center;
-  padding: 24rpx 20rpx;
-  border-bottom: 1px solid #eee;
-}
-.function-item:last-child {
-  border-bottom: none;
-}
-.icon {
-  width: 48rpx;
-  height: 48rpx;
-  margin-right: 20rpx;
-}
-.label {
-  font-size: 30rpx;
+background: $bg;
+min-height: 100vh;
+padding: 40rpx;
+box-sizing: border-box;
 }
 
+/* ================ 功能卡片 ================ */
+.function-list {
+background: $card;
+border-radius: $radius;
+box-shadow: $shadow;
+overflow: hidden;
+margin-bottom: 30rpx;
+}
+
+.function-item {
+display: flex;
+align-items: center;
+padding: 30rpx;
+border-bottom: 2rpx solid #f2f2f2;
+transition: background-color .2s $ease;
+&:last-child {
+border-bottom: none;
+}
+&:active {
+background-color: #f8f8f8;
+}
+}
+
+.icon {
+width: 48rpx;
+height: 48rpx;
+margin-right: 24rpx;
+}
+
+.label {
+font-size: 30rpx;
+color: $text-title;
+}
+
+/* ================ 申请卡片 ================ */
 .request-card {
-  display: flex;
-  align-items: center;
-  background-color: #fff;
-  border-radius: 12rpx;
-  padding: 16rpx;
-  margin-bottom: 12rpx;
-  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
+display: flex;
+align-items: center;
+background: $card;
+border-radius: $radius;
+box-shadow: $shadow;
+padding: 24rpx;
+margin-bottom: 16rpx;
+transition: transform .15s $ease;
+&:active {
+transform: scale(.98);
 }
 
 .avatar {
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: 50%;
-  margin-right: 16rpx;
+width: 88rpx;
+height: 88rpx;
+border-radius: 50%;
+margin-right: 24rpx;
+flex-shrink: 0;
+/* 黑边防遮挡 */
+//border: 4rpx solid #000;
+box-sizing: border-box;
 }
 
 .info {
-  flex: 1;
-}
-
+flex: 1;
+display: flex;
+flex-direction: column;
 .username {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #333;
+font-size: 32rpx;
+font-weight: 600;
+color: $text-title;
 }
-
 .message {
-  font-size: 24rpx;
-  color: #666;
-  margin-top: 4rpx;
+
+font-size: 26rpx;
+color: $text-desc;
+margin-top: 6rpx;
+
+}
 }
 
+/* 渐变同意按钮 */
 .accept-btn {
-  background-color: #3c9cff;
-  color: #fff;
-  border-radius: 8rpx;
-  padding: 8rpx 16rpx;
+width: 112rpx;
+height: 64rpx;
+border: none;
+border-radius: 12rpx;
+background: linear-gradient(135deg, $theme-start, $theme-end);
+color: #fff;
+font-size: 28rpx;
+font-weight: 600;
+display: flex;
+align-items: center;
+justify-content: center;
+box-shadow: 0 4rpx 16rpx rgba(7, 193, 96, .3);
+transition: transform .15s $ease;
+&:active {
+transform: scale(.92);
+}
+}
 }
 
+/* ================ 空状态 ================ */
 .no-request {
-  text-align: center;
-  color: #999;
-  font-size: 26rpx;
-  margin-top: 40rpx;
+margin-top: 60rpx;
+text-align: center;
+font-size: 28rpx;
+color: $text-desc;
 }
 </style>

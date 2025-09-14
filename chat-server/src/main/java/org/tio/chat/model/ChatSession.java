@@ -18,5 +18,6 @@ public class ChatSession {
     private String avatar;
     private Date lastTime;
     private int unread;
+    private String messageType;
 
 }

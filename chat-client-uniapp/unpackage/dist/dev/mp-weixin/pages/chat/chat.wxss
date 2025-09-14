@@ -71,21 +71,40 @@
 /* 接收方（左）*/
 .msg-item.friend.data-v-0a633310 {
   justify-content: flex-start;
+  display: flex;
+  align-items: flex-end;
+  /* 气泡本体 */
+  /* 左指向三角形 */
 }
 .msg-item.friend .avatar.data-v-0a633310 {
   margin-right: 20rpx;
 }
 .msg-item.friend .msg-content.data-v-0a633310 {
+  position: relative;
+  /* ✅ 三角形参照框 */
   background: #f8f8f8;
   color: #333;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  max-width: 60%;
+  word-break: break-all;
 }
 .msg-item.friend .msg-content.data-v-0a633310::after {
   content: "";
   position: absolute;
-  border: 12rpx solid transparent;
-  border-right: 12rpx solid #f8f8f8;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 12rpx 12rpx 12rpx 0;
+  /* 左指向 */
+  border-color: transparent #f8f8f8 transparent transparent;
+  /* ✅ 颜色同气泡 */
   left: -12rpx;
-  top: 18rpx;
+  /* 贴左边 */
+  top: 24rpx;
+  /* 垂直居中 */
+  z-index: 1;
+  /* ✅ 防止被头像盖住 */
 }
 
 /* 发送方（右）*/
@@ -93,6 +112,8 @@
   justify-content: flex-end;
   display: flex;
   align-items: flex-end;
+  /* 气泡本体 - 关键：relative */
+  /* 三角形 */
 }
 .msg-item.self .avatar.data-v-0a633310 {
   margin-left: 20rpx;
@@ -104,16 +125,31 @@
   align-self: flex-end;
 }
 .msg-item.self .msg-content.data-v-0a633310 {
-  background: #007aff;
+  position: relative;
+  /* ✅ 三角形参照框 */
+  background: darkslategrey;
   color: #fff;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  max-width: 60%;
+  word-break: break-all;
 }
 .msg-item.self .msg-content.data-v-0a633310::after {
   content: "";
   position: absolute;
-  border: 12rpx solid transparent;
-  border-left: 12rpx solid #007aff;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 12rpx 0 12rpx 12rpx;
+  /* 右指向 */
+  border-color: transparent transparent transparent darkslategrey;
+  /* ✅ 颜色同气泡 */
   right: -12rpx;
-  top: 18rpx;
+  /* 贴右边 */
+  top: 24rpx;
+  /* 垂直居中 */
+  z-index: 1;
+  /* ✅ 防止被头像盖住 */
 }
 
 /* 底部固定输入栏 */
@@ -129,6 +165,7 @@
   align-items: center;
   background: #FFFFFF;
   padding: 20rpx 24rpx 20rpx 40rpx;
+  box-sizing: border-box;
   box-sizing: border-box;
   z-index: 999;
   /* 保证在 scroll-view 之上 */
@@ -176,10 +213,18 @@
 }
 .msg-voice-btn.data-v-0a633310 {
   border: none;
-  background: #007aff;
-  color: #fff;
+  background: inherit;
+  /* ① 继承气泡背景色 */
+  color: inherit;
+  /* ② 继承气泡文字色 */
   padding: 6px 12px;
   border-radius: 3px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.msg-voice-btn.data-v-0a633310:active {
+  opacity: 0.7;
+  /* ③ 点击反馈 */
 }
 .msg-image.data-v-0a633310 {
   width: 150rpx;

@@ -9,59 +9,97 @@
 /* 垂直间距 */
 /* 透明度 */
 /* 文章场景相关 */
-.page.data-v-9437a25b {
-  padding: 0 32rpx;
-  color: #333;
+/* ================ 视觉变量 ================ */
+/* ================ 背景图 ================ */
+.bg-image.data-v-9437a25b {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
 }
+
+/* ================ 页面骨架 ================ */
+.page.data-v-9437a25b {
+  background: transparent;
+  min-height: 100vh;
+  padding: 40rpx;
+  box-sizing: border-box;
+}
+
+/* ================ 会话卡片 ================ */
 .list-item.data-v-9437a25b {
   display: flex;
-  padding: 30rpx 0;
-  border-bottom: 1px solid #f7f8f9;
+  align-items: center;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  background: #ffffff;
+  border-radius: 24rpx;
+  box-shadow: 0 8rpx 30rpx rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s cubic-bezier(0.4, 0.8, 0.2, 1);
+  /* 头像容器 */
+  /* 右侧内容 */
+}
+.list-item.data-v-9437a25b:active {
+  transform: scale(0.98);
 }
 .list-item .avatar.data-v-9437a25b {
-  width: 90rpx;
-  height: 90rpx;
-  border-radius: 10rpx;
-  margin-right: 20rpx;
+  width: 96rpx;
+  height: 96rpx;
+  margin-right: 24rpx;
   position: relative;
-}
-.list-item .avatar .round.data-v-9437a25b {
-  position: absolute;
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  background: #ef5656;
-  top: -4rpx;
-  right: -4rpx;
-  z-index: 1;
+  flex-shrink: 0;
+  /* 黑边防遮挡 */
+  /* 未读红点 → 带数字小徽章 */
 }
 .list-item .avatar image.data-v-9437a25b {
   width: 100%;
   height: 100%;
-  border-radius: 10rpx;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.list-item .avatar .round.data-v-9437a25b {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 16rpx;
+  background: #ef5656;
+  color: #fff;
+  font-size: 22rpx;
+  text-align: center;
+  z-index: 1;
 }
 .list-item .content.data-v-9437a25b {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 .list-item .content .title.data-v-9437a25b {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8rpx;
 }
 .list-item .content .title .name.data-v-9437a25b {
-  font-weight: bold;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2937;
 }
 .list-item .content .title .time.data-v-9437a25b {
-  color: #999;
   font-size: 24rpx;
+  color: #6b7280;
 }
 .list-item .content .txt.data-v-9437a25b {
-  margin-top: 10rpx;
+  font-size: 26rpx;
+  color: #6b7280;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
-  text-align: left;
-  color: #999;
-  font-size: 26rpx;
 }

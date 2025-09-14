@@ -24,7 +24,8 @@
           />
 
           <view v-if="item.fromUser === userId && item.type === 'private'" class="msg-status">
-            <text v-if="item.status === 'sending'">…</text>
+            <text v-if="item.status === 'uploading'">↑</text>
+            <text v-else-if="item.status === 'sending'">…</text>
             <text v-else-if="item.status === 'failed'">!</text>
             <text v-else-if="item.status === 'success'">✔</text>
             <text v-else-if="item.status === 'isRead'">✔✔</text>
@@ -41,7 +42,7 @@
           </view>
 
           <view class="msg-content" v-else-if="item.messageType==='voice'">
-            <button class="msg-voice-btn">
+            <button class="msg-voice-btn" @click.stop="play(item)">
               {{ item.content || '播放语音' }}
             </button>
           </view>
@@ -110,7 +111,8 @@ import {
 
 } from '@/utils/socket.js'
 
-const recorderManager = wx.getRecorderManager()
+const UPLOAD_URL = "http://localhost:8080/api/upload"
+let recorderManager = wx.getRecorderManager()
 
 export default {
   data() {
@@ -125,8 +127,8 @@ export default {
       targetId: '',
       targetType: '',
       currentTargetName: '',
-      selfAvatar: uni.getStorageSync('currentUserAvatar') || '', // 登录时存的头像 key
-      friendAvatar: '', // 会在 onLoad 里根据 target 赋值
+      selfAvatar: uni.getStorageSync('currentUserAvatar') || '/static/default-avatar/wusaqi.png',
+      friendAvatar: '/static/default-avatar/xiaoqi.png',
       connectionStatus: '未连接',
       scrollTop: 0,
       groupPageNum: 1,
@@ -138,7 +140,9 @@ export default {
       privatePageNum: 1,
       privatePageSize: 50,
       privateHasMore: true,
-      loadingPrivateHistory: false
+      loadingPrivateHistory: false,
+      // 内部使用
+      innerAudio: null,
     }
   },
 
@@ -155,18 +159,55 @@ export default {
 
   onLoad(options) {
     console.log('进入聊天页:', options)
-    this.userId = uni.getStorageSync('currentUserId') || ''
-    this.selfAvatar = uni.getStorageSync('currentUserAvatar') || this.selfAvatar || '/static/default-avatar/wusaqi.png'
-    this.targetId = options.targetId
-    this.targetType = options.type
-    this.currentTargetName = options.name || ''
-    this.friendAvatar = options.avatar || this.friendAvatar || '/static/default-avatar/xiaoqi.png'
+    this.userId = uni.getStorageSync('currentUserId') || '';
+    this.selfAvatar = uni.getStorageSync('currentUserAvatar') || this.selfAvatar;
+    this.targetId = options.targetId;
+    this.targetType = options.type;
+    this.currentTargetName = options.name || options.nickname;
+    this.friendAvatar = options.avatar || this.friendAvatar;
 
+    uni.setNavigationBarTitle({
+      title: this.currentTargetName || (this.targetType === 'group' ? '群聊' : '聊天')
+    })
 
     if (this.targetType === 'private') this.$set(this.privateMessages, this.targetId, [])
     if (this.targetType === 'group') this.$set(this.groupMessages, this.targetId, [])
 
+    try {
+      recorderManager = uni.getRecorderManager();
 
+      // ✅ 先解绑，避免重复绑定
+      recorderManager.onStart(() => {});
+      recorderManager.onStop(() => {});
+      recorderManager.onError(() => {});
+
+      // 再注册
+      recorderManager.onStart(() => {
+        this.recordStart = true;
+      });
+
+      recorderManager.onError((err) => {
+        console.error('recorder error', err);
+        this.recordStart = false;
+        uni.showToast({ icon: 'none', title: '录音失败' });
+      });
+
+      recorderManager.onStop((res) => {
+        this.handleRecorderStop(res);
+      });
+
+    } catch (e) {
+      console.warn('录音管理器初始化失败', e);
+    }
+
+    // 初始化 audio 播放器
+    try {
+      this.innerAudio = uni.createInnerAudioContext();
+      this.innerAudio.onEnded(() => {});
+      this.innerAudio.onError((e) => { console.error('audio play error', e); });
+    } catch (e) {
+      console.warn('音频播放初始化失败', e);
+    }
 
     // 注册回调
     setGroupHistoryHandler(arr => {
@@ -456,73 +497,53 @@ export default {
     },
 
 
-    /** 工具方法 */
-    disconnect() { closeSocket() },
-    formatTimestamp(ts) {
-      if (!ts) return ''
-      let dateObj
-
-      if (typeof ts === 'string') {
-        // 处理 iOS 不兼容 "yyyy-MM-dd HH:mm:ss"
-        if (ts.includes('-') && ts.includes(':') && ts.includes(' ')) {
-          ts = ts.replace(/-/g, '/')
-        }
-        dateObj = new Date(ts)
-      } else {
-        dateObj = new Date(ts)
-      }
-
-      if (isNaN(dateObj.getTime())) return '' // 避免 Invalid Date
-
-      const h = String(dateObj.getHours()).padStart(2, '0')
-      const m = String(dateObj.getMinutes()).padStart(2, '0')
-      const s = String(dateObj.getSeconds()).padStart(2, '0')
-      return `${h}:${m}:${s}`
-    },
-
-    retrySend(msg) {
-      msg.status = 'sending'
-      if (msg.type === 'private') sendMsg(msg)
-      else sendGroupMsg(msg)
-    },
-
     chooseImage() {
       uni.chooseImage({
-        // sourceType: 'album',
+        count: 1,
         success: (res) => {
-          this.list.push({
-            content: res.tempFilePaths[0],
-            userType: 'self',
+          const localPath = res.tempFilePaths[0];
+          // 构造消息（暂时标记为 uploading）
+          const msg = {
+            msgId: 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            fromUser: this.userId,
+            toUser: this.targetId,
+            content: '', // 上传完成后填入 URL
+            timestamp: Date.now(),
+            type: this.targetType,
             messageType: 'image',
-            avatar: this._selfAvatar
-          })
-          this.scrollToBottom()
-          // 模拟对方回复
-          setTimeout(() => {
-            this.list.push({
-              content: '风景好漂亮啊~',
-              userType: 'friend',
-              avatar: this._friendAvatar
-            })
-            this.scrollToBottom()
-          }, 1500)
+            status: 'uploading'
+          };
+
+          // push 到本地消息队列显示（上传过程中显示占位）
+          if (this.targetType === 'private') {
+            if (!this.privateMessages[this.targetId]) this.$set(this.privateMessages, this.targetId, []);
+            this.privateMessages[this.targetId].push(msg);
+          } else {
+            if (!this.groupMessages[this.targetId]) this.$set(this.groupMessages, this.targetId, []);
+            this.groupMessages[this.targetId].push(msg);
+          }
+
+          this.$nextTick(() => { this.scrollTop = 100000; });
+
+          // 上传文件并在成功后通过 WebSocket 发送消息
+          this.uploadAndSendFile(msg, localPath);
+        },
+        fail: (err) => {
+          console.error('chooseImage fail', err);
         }
       })
     },
 
-    scrollToBottom() {
-      this.top = this.list.length * 1000
-    },
-
-    msgClick(data) {
-      if (data.messageType === 'voice') {
-        if (this._innerAudioContext) {
-          this._innerAudioContext.stop()
-          this._innerAudioContext.src = data.audioSrc
-          this._innerAudioContext.play()
-          return
-        }
-        this.play(data.audioSrc)
+    msgClick(item) {
+      if (!item) return;
+      if (item.messageType === 'image') {
+        // 预览图片（小程序 api）
+        uni.previewImage({ urls: [item.content] });
+        return;
+      }
+      if (item.messageType === 'voice') {
+        this.play(item);
+        return;
       }
     },
 
@@ -555,125 +576,200 @@ export default {
       })
     },
 
+    /*************** 录音逻辑：touchstart / touchend 简洁调用 recorderManager ***************/
     touchstart() {
-      //开始录音
-      const _permission = 'scope.record'
+      if (this.recordStart) return; // 已经在录音中，避免重复开始
+      recorderManager.start({ format: 'mp3', duration: 60000 });
+
+      const _permission = 'scope.record';
+      // 简单权限判断：uni.getSetting + uni.authorize
       uni.getSetting({
         success: (res) => {
-          // 判断是否有相关权限属性
-          if (res.authSetting.hasOwnProperty(_permission)) {
-            // 属性存在，且为false，用户拒绝过权限
-            if (!res.authSetting[_permission]) {
-              this.authTips()
-            } else {
-              // 已授权
-              this._recordAuth = true
-              // 开始录音
-              recorderManager.start()
-              recorderManager.onStart(() => {
-                this.recordStart = true
-              })
-
-              // 错误回调
-              recorderManager.onError((res) => {
-                console.log('recorder error', res)
-                uni.showToast({
-                  icon: 'none',
-                  title: '系统出错，请重试'
-                })
-                this.recordStart = false
-              })
-            }
-          } else {
-            // 属性不存在，需要授权
-            uni.authorize({
-              scope: _permission,
-              success: () => {
-                // 授权成功
-                this._recordAuth = true
-              },
-              fail: (res) => {
-                /**
-                 * 104 未授权隐私协议
-                 * 用户可能拒绝官方隐私授权弹窗，为了避免过度弹窗打扰用户，开发者再次调用隐私相关接口时，
-                 * 若距上次用户拒绝不足10秒，将不再触发弹窗，直接给到开发者用户拒绝隐私授权弹窗的报错
-                 */
-                if (res.error == 104) {
-                  uni.showModal({
-                    title: '温馨提示',
-                    content: '您拒绝了隐私协议，请稍后再试',
-                    confirmText: '知道了',
-                    showCancel: false,
-                    success: () => {}
-                  })
-                } else {
-                  // 用户拒绝授权
-                  this.authTips()
-                }
-              }
-            })
+          if (res.authSetting && res.authSetting[_permission] === false) {
+            this.authTips();
+            return;
+          }
+          // 启动录音
+          const options = {
+            // small program: 默认格式 wx supports aac/mp3, 小程序平台格式请根据实际调整
+            format: 'mp3',
+            duration: 60000 // 最长 60s
+          };
+          try {
+            recorderManager.start(options);
+          } catch (e) {
+            console.error('recorder start error', e);
+            uni.showToast({ icon: 'none', title: '无法开始录音' });
           }
         }
-      })
+      });
     },
 
     touchend() {
-      if (!this._recordAuth || !this.recordStart) return
-      //停止录音
-      recorderManager.stop();
-      recorderManager.onStop((res) => {
-        console.log('结束录音', res)
-        const { duration, tempFilePath } = res
-        this.recordStart = false
+      if (!recorderManager || !this.recordStart) {
+        // nothing
+        return;
+      }
+      try {
+        recorderManager.stop();
+      } catch (e) {
+        console.error('recorder stop error', e);
+      }
+      // 实际的上传与发送由 recorderManager.onStop -> handleRecorderStop 处理
+    },
 
-        // 确保目标数组已初始化
-        const peerId = this.targetId;
-        if (!this.privateMessages[peerId]) this.$set(this.privateMessages, peerId, []);
+    /*************** 录音停止后的处理：上传并发送 ***************/
+    handleRecorderStop(res) {
+      console.log('录音结束：', res);
+      const { duration, tempFilePath } = res;
+      this.recordStart = false;
 
-        // 生成统一消息对象
-        const msg = {
-          msgId: 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          fromUser: this.userId,
-          toUser: peerId,
-          content: `语音 ${Math.round(duration / 1000)}''`,
-          audioSrc: tempFilePath,
-          timestamp: Date.now(),
-          type: 'private',
-          messageType: 'voice',
-          status: 'sending',  // 默认 sending
-          isOffline: false
+      const peerId = this.targetId;
+      if (this.targetType !== 'private' && this.targetType !== 'group') return;
+
+      // 初始化数组
+      if (this.targetType === 'private' && !this.privateMessages[peerId]) this.$set(this.privateMessages, peerId, []);
+      if (this.targetType === 'group' && !this.groupMessages[peerId]) this.$set(this.groupMessages, peerId, []);
+
+      // 生成消息占位（status uploading）
+      const msg = {
+        msgId: 'msg_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        fromUser: this.userId,
+        toUser: peerId,
+        content: `语音 ${Math.round(duration/1000)}''`,
+        audioUrl: '', // 上传后填充
+        timestamp: Date.now(),
+        type: this.targetType === 'private' ? 'private' : 'group',
+        messageType: 'voice',
+        status: 'uploading',
+        duration: Math.round((duration || 0) / 1000)
+      };
+
+      if (this.targetType === 'private') this.privateMessages[peerId].push(msg);
+      else this.groupMessages[peerId].push(msg);
+
+      this.$nextTick(() => { this.scrollTop = 100000; });
+
+      // 上传并发送
+      this.uploadAndSendFile(msg, tempFilePath);
+    },
+
+    /*************** 通用：上传本地文件并发送（图片 / 语音） ***************/
+    uploadAndSendFile(msg, localPath) {
+      const token = uni.getStorageSync('token') || '';
+
+      uni.uploadFile({
+        url: UPLOAD_URL,
+        filePath: localPath,
+        name: 'file',
+        header: {
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        success: (uploadRes) => {
+          try {
+            const data = JSON.parse(uploadRes.data);
+            if (data && data.result === 'ok' && data.url) {
+              // 将 URL 写回消息对象
+              if (msg.messageType === 'voice') {
+                msg.audioUrl = data.url;       // 播放用
+                msg.content = `语音 ${msg.duration}''`; // 保持展示文案
+              } else {
+                msg.content = data.url;        // 图片消息直接存 url
+              }
+
+              // 改为 sending 并通过 websocket 发送
+              msg.status = 'sending';
+              const onStatus = (status) => {
+                msg.status = status;
+                this.$forceUpdate();
+              };
+
+              if (msg.type === 'private') {
+                sendMsg(msg, onStatus);
+              } else { // group
+                msg.groupId = this.targetId;
+                sendGroupMsg(msg, onStatus);
+              }
+            } else {
+              msg.status = 'failed';
+              console.error('upload returned fail', uploadRes.data);
+              uni.showToast({ icon: 'none', title: '上传失败' });
+            }
+          } catch (e) {
+            msg.status = 'failed';
+            console.error('parse upload response error', e, uploadRes.data);
+          }
+        },
+        fail: (err) => {
+          msg.status = 'failed';
+          console.error('uploadFile fail', err);
+          uni.showToast({ icon: 'none', title: '上传失败' });
         }
+      });
+    },
 
-        // push 到消息数组
-        this.privateMessages[peerId].push(msg)
+    /*************** 播放音频（点击语音气泡） ***************/
+    play(item) {
+      const src = item.audioUrl;
+      if (!src) {
+        uni.showToast({ icon: 'none', title: '没有可播放音频' });
+        return;
+      }
 
-        // 调用发送函数（把语音文件上传或发到 socket）
-        sendMsg(msg, (status) => {
-          msg.status = status
-        })
+      this.innerAudio.offPlay();
+      this.innerAudio.offEnded();
+      this.innerAudio.offError();
 
-        // 滚动到底部
-        this.$nextTick(() => {
-          this.scrollTop = 100000
-        })
+      // 停止当前播放
+      try {
+        if (!this.innerAudio) this.innerAudio = uni.createInnerAudioContext();
+        this.innerAudio.stop();
+      } catch (e) {}
+
+
+      // 设 src 并播放
+      this.innerAudio.src = src;
+      this.innerAudio.play();
+      this.innerAudio.onPlay(() => { console.log('audio play', src); });
+      this.innerAudio.onEnded(() => { console.log('audio ended'); });
+    },
+
+    previewImage(url) {
+      uni.previewImage({
+        urls: [url], // 预览列表，可以放多张
+        current: url // 当前预览的图片
       })
     },
 
-    //播放声音
-    play(src) {
-      this._innerAudioContext = wx.createInnerAudioContext()
-      this._innerAudioContext.src = src
-      this._innerAudioContext.play()
-      this._innerAudioContext.onPlay(() => {
-        console.log('开始播放')
-      })
-      this._innerAudioContext.onEnded(() => {
-        // 播放完毕，清除音频链接
-        console.log('播放完毕');
-      })
-      this._innerAudioContext.onError((res) => {
-        console.log('audio play error', res)
-      })
+
+    /** 工具方法 */
+    disconnect() { closeSocket() },
+    formatTimestamp(ts) {
+      if (!ts) return ''
+      let dateObj
+
+      if (typeof ts === 'string') {
+        // 处理 iOS 不兼容 "yyyy-MM-dd HH:mm:ss"
+        if (ts.includes('-') && ts.includes(':') && ts.includes(' ')) {
+          ts = ts.replace(/-/g, '/')
+        }
+        dateObj = new Date(ts)
+      } else {
+        dateObj = new Date(ts)
+      }
+
+      if (isNaN(dateObj.getTime())) return '' // 避免 Invalid Date
+
+      const h = String(dateObj.getHours()).padStart(2, '0')
+      const m = String(dateObj.getMinutes()).padStart(2, '0')
+      const s = String(dateObj.getSeconds()).padStart(2, '0')
+      return `${h}:${m}:${s}`
+    },
+
+    retrySend(msg) {
+      msg.status = 'sending'
+      if (msg.type === 'private') sendMsg(msg)
+      else sendGroupMsg(msg)
     },
 
     /** 合并私聊历史（把更早的消息放在数组前面） */
@@ -836,23 +932,36 @@ export default {
 /* 接收方（左）*/
 .msg-item.friend {
   justify-content: flex-start;
+  display: flex;
+  align-items: flex-end;
 
   .avatar {
     margin-right: 20rpx;
   }
 
+  /* 气泡本体 */
   .msg-content {
+    position: relative;                /* ✅ 三角形参照框 */
     background: $uni-bg-color-grey;
     color: $uni-text-color;
+    padding: 20rpx 24rpx;
+    border-radius: 16rpx;
+    max-width: 60%;
+    word-break: break-all;
   }
 
+  /* 左指向三角形 */
   .msg-content::after {
     content: '';
     position: absolute;
-    border: 12rpx solid transparent;
-    border-right: 12rpx solid $uni-bg-color-grey;
-    left: -12rpx;
-    top: 18rpx;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 12rpx 12rpx 12rpx 0;   /* 左指向 */
+    border-color: transparent $uni-bg-color-grey transparent transparent; /* ✅ 颜色同气泡 */
+    left: -12rpx;                         /* 贴左边 */
+    top: 24rpx;                           /* 垂直居中 */
+    z-index: 1;                           /* ✅ 防止被头像盖住 */
   }
 }
 
@@ -873,18 +982,30 @@ export default {
     align-self: flex-end; // ✅ 保证和气泡底部对齐
   }
 
+  /* 气泡本体 - 关键：relative */
   .msg-content {
-    background: $uni-color-primary;
+    position: relative;                /* ✅ 三角形参照框 */
+    background: darkslategrey;
     color: $uni-text-color-inverse;
+    padding: 20rpx 24rpx;
+    border-radius: 16rpx;
+    max-width: 60%;
+    word-break: break-all;
   }
 
+
+  /* 三角形 */
   .msg-content::after {
     content: '';
     position: absolute;
-    border: 12rpx solid transparent;
-    border-left: 12rpx solid $uni-color-primary;
-    right: -12rpx;
-    top: 18rpx;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 12rpx 0 12rpx 12rpx;   /* 右指向 */
+    border-color: transparent transparent transparent darkslategrey; /* ✅ 颜色同气泡 */
+    right: -12rpx;                       /* 贴右边 */
+    top: 24rpx;                          /* 垂直居中 */
+    z-index: 1;                          /* ✅ 防止被头像盖住 */
   }
 }
 
@@ -899,6 +1020,7 @@ export default {
   align-items: center;
   background: #FFFFFF;
   padding: 20rpx 24rpx 20rpx 40rpx;
+  box-sizing: border-box;
   box-sizing: border-box;
   z-index: 999; /* 保证在 scroll-view 之上 */
 
@@ -953,10 +1075,16 @@ export default {
 
 .msg-voice-btn {
   border: none;
-  background: $uni-color-primary;
-  color: $uni-text-color-inverse;
+  background: inherit;          /* ① 继承气泡背景色 */
+  color: inherit;               /* ② 继承气泡文字色 */
   padding: 6px 12px;
   border-radius: $uni-border-radius-base;
+  cursor: pointer;
+  transition: opacity .2s;
+}
+
+.msg-voice-btn:active {
+  opacity: .7;                  /* ③ 点击反馈 */
 }
 
 .msg-image {

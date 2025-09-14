@@ -50,4 +50,7 @@ public class ChatMessage implements Serializable {
     private Integer PageSize;
 
     private String peerId;
+
+    private String messageType;
+    private String audioUrl;
 }

@@ -14,11 +14,11 @@ const _sfc_main = {
     this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
     this.loadRequests();
     utils_socket.registerCmdHandler(215, (msg) => {
-      common_vendor.index.__f__("log", "at pages/group-requests/group-requests.vue:46", "[215] 群聊申请:", msg);
+      common_vendor.index.__f__("log", "at pages/group-requests/group-requests.vue:49", "[215] 群聊申请:", msg);
       this.requests = msg.requests || [];
     });
     utils_socket.registerCmdHandler(214, (msg) => {
-      common_vendor.index.__f__("log", "at pages/group-requests/group-requests.vue:52", "[214] 收到新的群聊申请:", msg);
+      common_vendor.index.__f__("log", "at pages/group-requests/group-requests.vue:55", "[214] 收到新的群聊申请:", msg);
       this.loadRequests();
     });
   },
@@ -45,6 +45,12 @@ const _sfc_main = {
       this.requests = this.requests.filter((r) => !(r.fromUser === req.fromUser && r.groupId === req.groupId));
       common_vendor.index.$emit("refreshGroups");
     },
+    shortId(id) {
+      return id ? id.slice(0, 8) + "…" : "";
+    },
+    copyId(id) {
+      common_vendor.index.setClipboardData({ data: id });
+    },
     gotoGroups() {
       common_vendor.index.navigateTo({ url: "/pages/groups/groups" });
     }
@@ -52,20 +58,21 @@ const _sfc_main = {
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return common_vendor.e({
-    a: common_assets._imports_0$6,
+    a: common_assets._imports_0$5,
     b: common_vendor.o((...args) => $options.gotoGroups && $options.gotoGroups(...args)),
     c: common_vendor.f($data.requests, (req, index, i0) => {
       return {
         a: req.avatar || $data.defaultAvatar,
         b: common_vendor.t(req.username || req.fromUser),
-        c: common_vendor.t(req.groupName || req.groupId),
-        d: common_vendor.o(($event) => $options.agreeRequest(req), index),
-        e: index
+        c: common_vendor.t($options.shortId(req.groupId)),
+        d: common_vendor.o(($event) => $options.copyId(req.groupId), index),
+        e: common_vendor.o(($event) => $options.agreeRequest(req), index),
+        f: index
       };
     }),
     d: $data.requests.length === 0
   }, $data.requests.length === 0 ? {} : {});
 }
-const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
+const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render], ["__scopeId", "data-v-7b319bbd"]]);
 wx.createPage(MiniProgramPage);
 //# sourceMappingURL=../../../.sourcemap/mp-weixin/pages/group-requests/group-requests.js.map

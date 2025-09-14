@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.tio.chat.model.LoginRequest;
+import org.tio.chat.model.LoginResponse;
 import org.tio.chat.model.RegisterRequest;
 import org.tio.chat.service.AuthService;
 
@@ -38,15 +39,20 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
-        String token = authService.login(req.getUserId(), req.getPassword());
-        Map<String, Object> resp = new HashMap<>();
-        if (token != null) {
+        LoginResponse loginResp = authService.login(req.getUserId(), req.getPassword());
+        if (loginResp != null) {
+            Map<String, Object> resp = new HashMap<>();
             resp.put("result", "ok");
-            resp.put("token", token);
+            resp.put("token", loginResp.getToken());
+            resp.put("userId", loginResp.getUserId());
+            resp.put("username", loginResp.getUsername()); // 即使 null 也能存
+            resp.put("avatar", loginResp.getAvatar());
+            return ResponseEntity.ok(resp);
         } else {
-            resp.put("result", "fail");
-            resp.put("message", "Invalid credentials");
+            Map<String, Object> resp = new HashMap<>();
+                    resp.put("result", "fail");
+                    resp.put("message", "用户名或密码错误");
+                    return ResponseEntity.ok(resp);
         }
-        return ResponseEntity.ok(resp);
     }
 }

@@ -40,7 +40,7 @@ const _sfc_main = {
   methods: {
     loadGroups() {
       utils_socket.fetchGroups((res) => {
-        common_vendor.index.__f__("log", "at pages/groups/groups.vue:93", "[Groups] 收到群聊列表:", res);
+        common_vendor.index.__f__("log", "at pages/groups/groups.vue:94", "[Groups] 收到群聊列表:", res);
         if (res.groups) {
           this.groups = res.groups;
         }
@@ -69,15 +69,16 @@ const _sfc_main = {
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return common_vendor.e({
-    a: common_assets._imports_0$5,
-    b: common_vendor.o((...args) => $options.gotoCreateGroup && $options.gotoCreateGroup(...args)),
-    c: common_assets._imports_1$2,
-    d: common_vendor.o((...args) => $options.gotoJoinGroup && $options.gotoJoinGroup(...args)),
-    e: common_assets._imports_2$2,
-    f: common_vendor.o((...args) => $options.gotoGroupRequest && $options.gotoGroupRequest(...args)),
-    g: $data.groups.length === 0
+    a: common_assets._imports_0$3,
+    b: common_assets._imports_1$2,
+    c: common_vendor.o((...args) => $options.gotoCreateGroup && $options.gotoCreateGroup(...args)),
+    d: common_assets._imports_2$2,
+    e: common_vendor.o((...args) => $options.gotoJoinGroup && $options.gotoJoinGroup(...args)),
+    f: common_assets._imports_3$1,
+    g: common_vendor.o((...args) => $options.gotoGroupRequest && $options.gotoGroupRequest(...args)),
+    h: $data.groups.length === 0
   }, $data.groups.length === 0 ? {} : {}, {
-    h: common_vendor.f($data.groups, (item, idx, i0) => {
+    i: common_vendor.f($data.groups, (item, idx, i0) => {
       return {
         a: item.avatar || $data.defaultGroupAvatar,
         b: common_vendor.t(item.groupName),
