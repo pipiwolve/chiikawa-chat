@@ -10,7 +10,7 @@
     </view>
 
     <!-- 群聊申请卡片 -->
-    <view v-for="(req, index) in requests" :key="index" class="request-card">
+    <view v-for="(req, index) in list" :key="index" class="request-card">
       <image class="avatar" :src="req.avatar || defaultAvatar"></image>
       <view class="info">
         <text class="username">{{ req.username || req.fromUser }}</text>
@@ -23,82 +23,66 @@
     </view>
 
     <!-- 空状态 -->
-    <view v-if="requests.length === 0" class="no-request">
+    <view v-if="list.length === 0" class="no-request">
       暂无群聊申请
     </view>
   </view>
 </template>
 
 <script>
-import { registerCmdHandler, unregisterCmdHandler, sendCmdMessage, fetchGroupRequests } from "@/utils/socket.js"
+import { mapState, mapActions } from 'vuex'
+import { sendCmdMessage } from '@/utils/socket.js'
 
 export default {
   data() {
     return {
-      requests: [],
-      userId: "",
-     defaultAvatar: '/static/default-avatar/helanzhu.png'
+      userId: ''                 // ✅ 1. 补上 userId
+    }
+  },
+
+  computed: {
+    ...mapState('groupRequests', ['list']),
+    defaultAvatar: () => '/static/default-avatar/helanzhu.png'
+  },
+
+  methods: {
+    ...mapActions('groupRequests', ['loadList']),
+
+    /* 兜底拉取：把当前用户ID传进去 */
+    loadRequests() {
+      this.loadList({ userId: this.userId })   // ✅ 2. 带参调用
+    },
+
+    agreeRequest(req) {
+      sendCmdMessage(210, {
+        fromUser: this.userId,   // ✅ 用本页 data 里的 userId
+        applicant: req.fromUser,
+        groupId: req.groupId
+      })
+      uni.showToast({ title: '已同意申请', icon: 'success' })
+
+      // 本地移除（操作 Vuex）
+      this.$store.commit('groupRequests/REMOVE_ONE', req.fromUser)
+    },
+
+    shortId(id) {
+      return id ? id.slice(0, 8) + '…' : ''
+    },
+    copyId(id) {
+      uni.setClipboardData({ data: id })
+    },
+    gotoGroups() {
+      uni.navigateTo({ url: '/pages/groups/groups' })
     }
   },
 
   onLoad() {
-    this.userId = uni.getStorageSync("currentUserId") || ""
-    this.loadRequests()
-
-    registerCmdHandler(215, (msg) => {
-      console.log("[215] 群聊申请:", msg)
-      this.requests = msg.requests || []
-    })
-
-    // 监听新申请 (cmd=208)
-    registerCmdHandler(214, (msg) => {
-      console.log("[214] 收到新的群聊申请:", msg)
-      this.loadRequests()
-    })
+    this.userId = uni.getStorageSync('currentUserId') || ''   // ✅ 读取
+    this.loadRequests()                                       // 首次拉取
   },
 
-  onUnload() {
-    unregisterCmdHandler(214)
-    unregisterCmdHandler(215)
-  },
-
-  methods: {
-    /** 加载群聊申请 */
-    loadRequests() {
-      fetchGroupRequests((res) => {
-        this.requests = res.requests || []
-      })
-    },
-
-    refreshRequests() {
-      this.loadRequests()
-    },
-
-    agreeRequest(req) {
-      // 群主同意 → cmd=210
-      sendCmdMessage(210, {
-        fromUser: this.userId,
-        applicant: req.fromUser,   // ✅ 只传字符串
-        groupId: req.groupId
-      })
-
-      uni.showToast({ title: "已同意申请", icon: "success" })
-
-      // 前端本地移除
-      this.requests = this.requests.filter(r => !(r.fromUser === req.fromUser && r.groupId === req.groupId))
-
-      // 通知群聊联系人页刷新
-      uni.$emit("refreshGroups")
-    },
-    shortId(id) {
-      return id ? id.slice(0, 8) + '…' : '';
-    },
-    copyId(id) {
-      uni.setClipboardData({ data: id });
-    },
-    gotoGroups(){
-      uni.navigateTo({url: "/pages/groups/groups"})
-    },
+  onShow() {
+    this.loadRequests()   // ✅ 生命周期：切回来兜底
   }
 }
 </script>

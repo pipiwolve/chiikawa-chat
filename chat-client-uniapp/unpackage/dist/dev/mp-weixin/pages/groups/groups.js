@@ -1,51 +1,16 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
-const utils_socket = require("../../utils/socket.js");
 const common_assets = require("../../common/assets.js");
 const _sfc_main = {
-  data() {
-    return {
-      groups: [],
-      defaultGroupAvatar: "/static/default-avatar/hashiqi.png"
-    };
-  },
-  onLoad() {
-    this.loadGroups();
-    common_vendor.index.$on("refreshGroups", this.loadGroups);
-    utils_socket.registerCmdHandler(203, (data) => {
-      common_vendor.index.showToast({ title: `群聊 ${data.groupName} 创建成功`, icon: "success" });
-      common_vendor.index.$emit("refreshGroups");
-    });
-    utils_socket.registerCmdHandler(204, (data) => {
-      common_vendor.index.showToast({ title: `你已加入群聊 ${data.groupName}`, icon: "success" });
-      common_vendor.index.$emit("refreshGroups");
-    });
-    utils_socket.setJoinGroupHandler((msg) => {
-      if (msg.cmd === 214) {
-        common_vendor.index.showToast({ title: `收到新加入群申请`, icon: "none" });
-      } else if (msg.cmd === 210) {
-        common_vendor.index.showToast({ title: `群聊列表已更新`, icon: "success" });
-        common_vendor.index.$emit("refreshGroups");
-      }
-    });
-  },
-  onUnload() {
-    common_vendor.index.$off("refreshGroups", this.loadGroups);
-    utils_socket.unregisterCmdHandler(212);
-    utils_socket.unregisterCmdHandler(203);
-    utils_socket.unregisterCmdHandler(204);
-    utils_socket.unregisterCmdHandler(214);
-    utils_socket.unregisterCmdHandler(210);
+  computed: {
+    ...common_vendor.mapState("groups", ["list"]),
+    // 直接读全局 list
+    defaultGroupAvatar() {
+      return "/static/default-avatar/xianluomao.png";
+    }
   },
   methods: {
-    loadGroups() {
-      utils_socket.fetchGroups((res) => {
-        common_vendor.index.__f__("log", "at pages/groups/groups.vue:94", "[Groups] 收到群聊列表:", res);
-        if (res.groups) {
-          this.groups = res.groups;
-        }
-      });
-    },
+    ...common_vendor.mapActions("groups", ["loadGroups"]),
     gotoCreateGroup() {
       common_vendor.index.navigateTo({ url: "/pages/create-group/create-group" });
     },
@@ -65,6 +30,9 @@ const _sfc_main = {
         });
       }
     }
+  },
+  onShow() {
+    this.loadGroups();
   }
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
@@ -76,11 +44,11 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
     e: common_vendor.o((...args) => $options.gotoJoinGroup && $options.gotoJoinGroup(...args)),
     f: common_assets._imports_3$1,
     g: common_vendor.o((...args) => $options.gotoGroupRequest && $options.gotoGroupRequest(...args)),
-    h: $data.groups.length === 0
-  }, $data.groups.length === 0 ? {} : {}, {
-    i: common_vendor.f($data.groups, (item, idx, i0) => {
+    h: _ctx.list.length === 0
+  }, _ctx.list.length === 0 ? {} : {}, {
+    i: common_vendor.f(_ctx.list, (item, idx, i0) => {
       return {
-        a: item.avatar || $data.defaultGroupAvatar,
+        a: item.avatar || $options.defaultGroupAvatar,
         b: common_vendor.t(item.groupName),
         c: idx,
         d: common_vendor.o(($event) => $options.connect(item), idx)

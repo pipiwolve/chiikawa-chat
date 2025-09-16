@@ -11,8 +11,10 @@
 /* 文章场景相关 */
 /* ================ 视觉变量 ================ */
 .data-v-9e12f509:root {
-  --theme-start: #6366f1;
-  --theme-end: #8b5cf6;
+  --theme-start: #07c160;
+  /* 微信绿起点 */
+  --theme-end: #05a14a;
+  /* 渐变终点 */
   --bg: #f7f8fc;
   --card: #ffffff;
   --radius: 24rpx;

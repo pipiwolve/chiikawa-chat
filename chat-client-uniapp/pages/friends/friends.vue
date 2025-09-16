@@ -24,7 +24,7 @@
     </view>
 
 
-    <view v-for="(item, index) in friends" :key="index" class="list-item" @click="connect(item)">
+    <view v-for="(item, index) in list" :key="index" class="list-item" @click="connect(item)">
       <image class="avatar" :src="item.avatar || defaultAvatar"></image>
       <text class="nickname">{{ item.username }}</text>
     </view>
@@ -32,48 +32,27 @@
 </template>
 
 <script>
-import { fetchFriends, registerCmdHandler, unregisterCmdHandler } from '@/utils/socket.js'
+import { mapState, mapActions } from 'vuex'
 
 export default {
-  data() {
-    return {
-      friends: [],
-      defaultAvatar: '/static/default-avatar/xianluomao.png',
-    }
-  },
-  onLoad() {
-    this.loadFriends()
-    uni.$on("refreshFriends", this.loadFriends)
-
-    registerCmdHandler(207, (data) => {
-      // 只有非自己发起的通知才显示 Toast
-      if (data.friendId !== this.userId) {
-        uni.showToast({title: `你和 ${data.friendId} 已成为好友`, icon: "success"})
+    computed: {
+      ...mapState('friends', ['list']),   // 全局 list
+      // 本地常量
+      defaultAvatar() {
+        return '/static/default-avatar/xianluomao.png'
       }
-      uni.$emit("refreshFriends")
-    })
-  },
-
-  onUnload() {
-    uni.$off("refreshFriends", this.loadFriends) // 避免重复绑定
-
-    unregisterCmdHandler(200)
-    unregisterCmdHandler(207)
-
-
-  },
-
-
-  methods: {
-    loadFriends() {
-      fetchFriends((res) => {
-        console.log("[Friends] 收到好友列表:", res)
-        if (res.friends) {
-          this.friends = res.friends
-        }
-      })
     },
 
+  onload(){
+    this.userId = uni.getStorageSync('currentUserId') || ''
+  },
+
+  onShow() {
+    this.loadFriends({userId: this.userId})   // 兜底：切回来就拉一次
+  },
+
+  methods: {
+    ...mapActions('friends', ['loadFriends']),
     // 打开 + 菜单
     openMenu() {
       uni.showActionSheet({

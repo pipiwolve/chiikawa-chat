@@ -10,7 +10,7 @@
 
     </view>
 
-    <view v-for="(req, index) in requests" :key="index" class="request-card">
+    <view v-for="(req, index) in list" :key="index" class="request-card">
       <image class="avatar" :src="req.avatar || defaultAvatar"></image>
       <view class="info">
         <text class="username">{{ req.username || req.fromUser }}</text>
@@ -19,64 +19,53 @@
       <button class="accept-btn" @click="respond(req.fromUser, 'accept')">同意</button>
     </view>
 
-    <view v-if="requests.length === 0" class="no-request">
+    <view v-if="list.length === 0" class="no-request">
       暂无好友申请
     </view>
   </view>
 </template>
 
 <script>
-import { fetchFriendRequests, respondFriendRequest, registerCmdHandler } from '@/utils/socket.js'
+import { mapState, mapActions } from 'vuex'
 
 export default {
   data() {
     return {
-      requests: [],
-      defaultAvatar: '/static/default-avatar/yang.png'
+      userId: ''               // ✅ 1. 当前用户 ID
     }
   },
-  onLoad() {
-    // 注册 cmd=205 回调，收到新好友申请时触发
-    registerCmdHandler(205, (data) => {
-      this.requests.unshift({
-        fromUser: data.fromUser,
-        username: data.username || data.fromUser,
-        avatar: data.avatar || '',
-        message: data.message || `${data.fromUser} 想加你为好友`
-      })
-    })
 
-    // 获取当前未处理好友申请
-    fetchFriendRequests((data) => {
-      console.log("[Friends-Requests] 收到好友申请列表:", data)
-      if (data.requests) {
-        this.requests = data.requests.map(r => ({
-          fromUser: r.fromUser,
-          username: r.username || r.fromUser,
-          avatar: r.avatar || '',
-          message: r.message || `${r.fromUser} 想加你为好友`
-        }))
-      }
-    })
-  },
-  onUnload() {
-    // 清理回调，避免内存泄漏
-    registerCmdHandler(205, null)
-    registerCmdHandler(209, null)
+  computed: {
+    ...mapState('friendRequests', ['list']),
+    defaultAvatar: () => '/static/default-avatar/yang.png'
   },
 
   methods: {
-    respond(fromUser, action) {
-      const currentUser = uni.getStorageSync("currentUserId")
-      respondFriendRequest(fromUser, currentUser, action)      // 移除已处理请求
-      this.requests = this.requests.filter(r => r.fromUser !== fromUser)
+    ...mapActions('friendRequests', ['loadList', 'agree']),
+
+    /* 兜底拉取：把 userId 传给 Vuex，后端需要 */
+    loadRequests() {
+      this.loadList({ userId: this.userId })   // ✅ 2. 带参
     },
-    gotoAddFriend(){
-      uni.navigateTo({url: "/pages/add-friend/add-friend"})
+
+    // 点击同意
+    respond(fromUser) {
+      this.agree({ fromUser, userId: this.userId }) // ✅ 3. 传参给 Vuex
+    },
+
+    gotoAddFriend() {
+      uni.navigateTo({ url: '/pages/add-friend/add-friend' })
     }
   },
 
+  onLoad() {
+    this.userId = uni.getStorageSync('currentUserId') || ''  // ✅ 4. 读取
+    this.loadRequests()                                      // 首次拉取
+  },
 
+  onShow() {
+    this.loadRequests()   // ✅ 5. 生命周期兜底
+  }
 }
 </script>
 

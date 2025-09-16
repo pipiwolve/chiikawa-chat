@@ -18,34 +18,45 @@
   </view>
 </template>
 
-<script>
+<script setup>
+import { ref } from 'vue'
+import { useStore } from 'vuex'
+import { onShow } from '@dcloudio/uni-app'
 import { createGroup } from '@/utils/socket.js'
 
-export default {
-  data() {
-    return {
-      groupName: '',
-      membersText: '',
-      status: ''
-    }
-  },
-  methods: {
-    handleCreateGroup() {
-      if (!this.groupName) {
-        this.status = '请输入群聊名称'
-        return
-      }
-      const members = this.membersText.split(',').map(m => m.trim()).filter(m => m)
-      createGroup(this.groupName, members, (resp) => {
-        if (resp.result === 'ok') {
-          this.status = `群聊创建成功：${resp.groupName} (ID: ${resp.groupId})`
-        } else {
-          this.status = '创建失败: ' + (resp.reason || '未知错误')
-        }
-      })
-    }
+/* 响应式数据 */
+const store = useStore()
+const groupName = ref('')
+const membersText = ref('')
+const status = ref('')
+
+/* 方法：创建群聊 */
+function handleCreateGroup() {
+  if (!groupName.value.trim()) {
+    status.value = '请输入群聊名称'
+    return
   }
+  const members = membersText.value
+      .split(',')
+      .map(m => m.trim())
+      .filter(m => m)
+
+  status.value = '正在创建...'
+  createGroup(groupName.value, members, (resp) => {
+    if (resp.result === 'ok') {
+      status.value = `群聊创建成功：${resp.groupName} (ID: ${resp.groupId})`
+      // 后端会推 203 → App.vue 已统一 mergeGroup，这里不再 emit
+    } else {
+      status.value = '创建失败: ' + (resp.reason || '未知错误')
+    }
+  })
 }
+
+
+/* 兜底：进入页面时拉一次最新列表（可选）*/
+onShow(() => {
+  store.dispatch('groups/loadGroups')   // 只兜底，不监听
+})
 </script>
 
 <style lang="scss" scoped>

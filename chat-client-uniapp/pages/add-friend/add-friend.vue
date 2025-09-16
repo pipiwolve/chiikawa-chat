@@ -28,9 +28,9 @@ export default {
     // 注册 cmd 回调
     registerCmdHandler(202, (data) => {
       if (data.result === "pending") {
-        uni.showToast({title: "好友申请已发送", icon: "none"})
+        uni.showToast({title: `好友申请已发送`, icon: `none`})
       } else if (data.result === "fail") {
-        uni.showToast({title: "好友申请失败", icon: "none"})
+        uni.showToast({title: `好友申请失败`, icon: `none`})
       }
     })
 
@@ -46,7 +46,6 @@ export default {
   },
   onUnload() {
     registerCmdHandler(202, null)
-    registerCmdHandler(207, null)
   }
 }
 </script>
@@ -54,8 +53,8 @@ export default {
 <style lang="scss" scoped>
 /* ================ 视觉变量 ================ */
 :root {
-  --theme-start: #6366f1;
-  --theme-end: #8b5cf6;
+  --theme-start: #07c160;      /* 微信绿起点 */
+  --theme-end: #05a14a;        /* 渐变终点 */
   --bg: #f7f8fc;
   --card: #ffffff;
   --radius: 24rpx;

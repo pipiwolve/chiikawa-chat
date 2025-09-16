@@ -1,71 +1,17 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
-const utils_socket = require("../../utils/socket.js");
 const common_assets = require("../../common/assets.js");
 const _sfc_main = {
-  data() {
-    return {
-      users: [],
-      defaultAvatar: "/static/default-avatar/xiaoqi.png",
-      userId: ""
-    };
+  computed: {
+    ...common_vendor.mapState("sessions", ["list"]),
+    // 全局 list
+    defaultAvatar: () => "/static/default-avatar/xiaoqi.png"
   },
-  onLoad() {
-    this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
-    common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:39", "消息中心取到用户ID", this.userId);
-    this.loadSessions();
-    utils_socket.registerCmdHandler(205, (data) => {
-      common_vendor.index.$emit("refreshFriendRequests");
-      common_vendor.index.showToast({ title: `${data.fromUser} 申请加你为好友`, icon: "none" });
-    });
-    utils_socket.registerCmdHandler(207, (data) => {
-      common_vendor.index.showToast({ title: `你和 ${data.friendId} 已成为好友`, icon: "success" });
-      common_vendor.index.$emit("refreshFriends");
-      this.loadSessions();
-    });
-    utils_socket.registerCmdHandler(101, (data) => {
-      this.loadSessions();
-    });
-    utils_socket.registerCmdHandler(201, () => this.loadSessions());
-    utils_socket.registerCmdHandler(203, () => this.loadSessions());
-    utils_socket.registerCmdHandler(204, () => this.loadSessions());
-    common_vendor.index.$on("sessionsUpdated", (resp) => {
-      common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:69", "[sessions.vue] 收到 sessionsUpdated:", resp);
-      this.users = (resp.sessions || []).map((s) => ({
-        ...s,
-        hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
-      }));
-    });
-    common_vendor.index.$on("clearUnread", this.loadSessions);
-    common_vendor.index.$on("refreshSessions", this.loadSessions);
-    common_vendor.index.$on("refreshFriends", this.loadSessions);
-    common_vendor.index.$on("refreshGroups", this.loadSessions);
-  },
-  onUnload() {
-    common_vendor.index.$off("refreshFriends", this.loadSessions);
-    common_vendor.index.$off("refreshGroups", this.loadSessions);
-    common_vendor.index.$off("refreshSessions", this.loadSessions);
-    common_vendor.index.$off("clearUnread", this.loadSessions);
-    common_vendor.index.$off("sessionsUpdated");
-    utils_socket.unregisterCmdHandler(205);
-    utils_socket.unregisterCmdHandler(207);
-    utils_socket.unregisterCmdHandler(201);
-    utils_socket.unregisterCmdHandler(203);
-    utils_socket.unregisterCmdHandler(204);
-    utils_socket.unregisterCmdHandler(101);
+  onShow() {
+    this.loadList();
   },
   methods: {
-    // 获取最近会话（cmd=200）
-    loadSessions() {
-      utils_socket.fetchSessions((resp) => {
-        common_vendor.index.__f__("log", "at pages/sessions/sessions.vue:107", "[Sessions] 最近会话:", resp.sessions);
-        this.users = (resp.sessions || []).map((s) => ({
-          ...s,
-          // 标记未读：未读消息或存在待处理好友请求
-          hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
-        }));
-      });
-    },
+    ...common_vendor.mapActions("sessions", ["loadList"]),
     // 点击会话进入聊天
     connect(item) {
       let query = `?targetId=${item.sessionId}&type=${item.type}&name=${item.nickname}`;
@@ -106,11 +52,11 @@ const _sfc_main = {
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   return {
     a: common_assets._imports_0$3,
-    b: common_vendor.f($data.users, (item, index, i0) => {
+    b: common_vendor.f(_ctx.list, (item, index, i0) => {
       return common_vendor.e({
         a: item.hasUnread > 0
       }, item.hasUnread > 0 ? {} : {}, {
-        b: item.avatar || $data.defaultAvatar,
+        b: item.avatar || $options.defaultAvatar,
         c: common_vendor.t(item.nickname || item.name),
         d: common_vendor.t($options.formatTime(item.lastTime)),
         e: common_vendor.t($options.formatLastMsg(item) || "暂无消息"),

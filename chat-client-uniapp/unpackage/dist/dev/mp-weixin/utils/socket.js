@@ -15,7 +15,6 @@ const msgStatusCallbacks = /* @__PURE__ */ new Map();
 const CONNECT_STATUS = { DISCONNECTED: 0, CONNECTING: 1, CONNECTED: 2 };
 let connectStatus = CONNECT_STATUS.DISCONNECTED;
 let onReplayGroupHistory = null;
-let onJoinGroup = null;
 let onPrivateHistory = null;
 function connectSocket(userId, token, onMessage) {
   if (connectStatus === CONNECT_STATUS.CONNECTED || connectStatus === CONNECT_STATUS.CONNECTING)
@@ -255,17 +254,6 @@ function fetchGroups(onResult) {
   registerCmdHandler(212, onResult);
   sendCmdMessage(212);
 }
-function setJoinGroupHandler(callback) {
-  onJoinGroup = callback;
-  registerCmdHandler(214, (msg) => {
-    common_vendor.index.__f__("log", "at utils/socket.js:315", "[214] 收到加入群申请通知:", msg);
-    onJoinGroup && onJoinGroup(msg);
-  });
-  registerCmdHandler(210, (msg) => {
-    common_vendor.index.__f__("log", "at utils/socket.js:320", "[210] 群聊列表需要刷新:", msg);
-    onJoinGroup && onJoinGroup(msg);
-  });
-}
 function sendMsg(msg, onStatusChange) {
   const data = { cmd: 2, type: "private", ...msg };
   try {
@@ -421,7 +409,6 @@ exports.sendPrivateHistoryRequest = sendPrivateHistoryRequest;
 exports.sendReadAck = sendReadAck;
 exports.sendReplayGroupHistoryRequest = sendReplayGroupHistoryRequest;
 exports.setGroupHistoryHandler = setGroupHistoryHandler;
-exports.setJoinGroupHandler = setJoinGroupHandler;
 exports.setPrivateHistoryHandler = setPrivateHistoryHandler;
 exports.setReadAckHandler = setReadAckHandler;
 exports.setReplayGroupHistoryHandler = setReplayGroupHistoryHandler;

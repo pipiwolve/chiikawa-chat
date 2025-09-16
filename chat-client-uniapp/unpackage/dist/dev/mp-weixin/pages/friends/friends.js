@@ -1,38 +1,23 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
-const utils_socket = require("../../utils/socket.js");
 const common_assets = require("../../common/assets.js");
 const _sfc_main = {
-  data() {
-    return {
-      friends: [],
-      defaultAvatar: "/static/default-avatar/xianluomao.png"
-    };
+  computed: {
+    ...common_vendor.mapState("friends", ["list"]),
+    // 全局 list
+    // 本地常量
+    defaultAvatar() {
+      return "/static/default-avatar/xianluomao.png";
+    }
   },
-  onLoad() {
-    this.loadFriends();
-    common_vendor.index.$on("refreshFriends", this.loadFriends);
-    utils_socket.registerCmdHandler(207, (data) => {
-      if (data.friendId !== this.userId) {
-        common_vendor.index.showToast({ title: `你和 ${data.friendId} 已成为好友`, icon: "success" });
-      }
-      common_vendor.index.$emit("refreshFriends");
-    });
+  onload() {
+    this.userId = common_vendor.index.getStorageSync("currentUserId") || "";
   },
-  onUnload() {
-    common_vendor.index.$off("refreshFriends", this.loadFriends);
-    utils_socket.unregisterCmdHandler(200);
-    utils_socket.unregisterCmdHandler(207);
+  onShow() {
+    this.loadFriends({ userId: this.userId });
   },
   methods: {
-    loadFriends() {
-      utils_socket.fetchFriends((res) => {
-        common_vendor.index.__f__("log", "at pages/friends/friends.vue:70", "[Friends] 收到好友列表:", res);
-        if (res.friends) {
-          this.friends = res.friends;
-        }
-      });
-    },
+    ...common_vendor.mapActions("friends", ["loadFriends"]),
     // 打开 + 菜单
     openMenu() {
       common_vendor.index.showActionSheet({
@@ -75,9 +60,9 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
     e: common_vendor.o((...args) => $options.gotoGroups && $options.gotoGroups(...args)),
     f: common_assets._imports_3,
     g: common_vendor.o((...args) => $options.openMenu && $options.openMenu(...args)),
-    h: common_vendor.f($data.friends, (item, index, i0) => {
+    h: common_vendor.f(_ctx.list, (item, index, i0) => {
       return {
-        a: item.avatar || $data.defaultAvatar,
+        a: item.avatar || $options.defaultAvatar,
         b: common_vendor.t(item.username),
         c: index,
         d: common_vendor.o(($event) => $options.connect(item), index)

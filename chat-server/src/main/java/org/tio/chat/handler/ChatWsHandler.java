@@ -296,7 +296,7 @@ public class ChatWsHandler implements IWsMsgHandler {
                     // 如果成功插入申请，通知群主（如果在线）
                     if (inserted) {
                         Map<String, Object> notify = new HashMap<>();
-                        notify.put("cmd", 214); // 加入群申请通知
+                        notify.put("cmd", 218); // 加入群申请通知
                         notify.put("fromUser", fromUser);
                         notify.put("groupId", groupId);
                         notify.put("result", "pending");
@@ -373,7 +373,7 @@ public class ChatWsHandler implements IWsMsgHandler {
                 // 创建群聊
                 case 203: {      // 鉴权：必须已登录（T-io 已绑定 userId）
                     if (channelContext.userid == null || !channelContext.userid.equals(chatMessage.getFromUser())) {
-                        Map<String,Object> err = new HashMap<>();
+                        Map<String, Object> err = new HashMap<>();
                         err.put("cmd", 203);
                         err.put("result", "fail");
                         err.put("reason", "unauthorized");
@@ -400,15 +400,12 @@ public class ChatWsHandler implements IWsMsgHandler {
                     if (members != null) {
                         for (String uid : new LinkedHashSet<>(members)) {
                             if (uid == null || uid.equals(ownerId)) continue;
-                            SetWithLock<ChannelContext> mCtx = Tio.getChannelContextsByUserid(channelContext.tioConfig, uid);
-                            if (mCtx != null) {
-                                Map<String,Object> notify = new HashMap<>();
-                                notify.put("cmd", 204); // 204 = 被拉入新群通知
-                                notify.put("groupId", group.getGroupId());
-                                notify.put("groupName", group.getGroupName());
-                                notify.put("inviter", ownerId);
-                                Tio.send(channelContext, WsResponse.fromText(JsonUtil.toJson(notify), ChatServerConfig.CHARSET));
-                            }
+                            Map<String, Object> notify = new HashMap<>();
+                            notify.put("cmd", 204); // 204 = 被拉入新群通知
+                            notify.put("groupId", group.getGroupId());
+                            notify.put("groupName", group.getGroupName());
+                            notify.put("inviter", ownerId);
+                            Tio.sendToUser(channelContext.tioConfig, uid, WsResponse.fromText(JsonUtil.toJson(notify), ChatServerConfig.CHARSET));
                         }
                     }
                     break;

@@ -4,7 +4,7 @@
     <!-- 最近会话列表 -->
     <view
         class="list-item"
-        v-for="(item,index) in users"
+        v-for="(item,index) in list"
         :key="index"
         @click="connect(item)"
     >
@@ -24,94 +24,20 @@
 </template>
 
 <script>
-import { fetchSessions, registerCmdHandler, unregisterCmdHandler } from '@/utils/socket.js'
+import { mapState, mapActions } from 'vuex'
 
 export default {
-  data() {
-    return {
-      users: [],
-      defaultAvatar: '/static/default-avatar/xiaoqi.png',
-      userId: ''
-    }
-  },
-  onLoad() {
-    this.userId = uni.getStorageSync('currentUserId') || ''
-    console.log('消息中心取到用户ID', this.userId)
-    this.loadSessions()
-
-    registerCmdHandler(205, (data) => {
-      // data.fromUser 表示申请人
-      uni.$emit("refreshFriendRequests")
-      // 可在 sessions 页面显示红点
-      uni.showToast({ title: `${data.fromUser} 申请加你为好友`, icon: "none" })
-    })
-
-    // 好友添加成功回调
-    registerCmdHandler(207, (data) => {
-      uni.showToast({ title: `你和 ${data.friendId} 已成为好友`, icon: 'success' })
-      uni.$emit('refreshFriends')
-      this.loadSessions()
-    })
-
-
-    registerCmdHandler(101, (data) => {
-      // 收到已读回执 → 会话的未读数可能已变，刷新 sessions
-      this.loadSessions();
-    });
-
-    // 群聊相关回调
-    registerCmdHandler(201, () => this.loadSessions()) // 加群成功
-    registerCmdHandler(203, () => this.loadSessions()) // 创建群成功
-    registerCmdHandler(204, () => this.loadSessions()) // 被拉入群
-
-    // ✅ 监听全局 sessionsUpdated 事件
-    uni.$on("sessionsUpdated", (resp) => {
-      console.log('[sessions.vue] 收到 sessionsUpdated:', resp)
-      this.users = (resp.sessions || []).map(s => ({
-        ...s,
-        hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
-      }))
-    })
-
-
-    uni.$on('clearUnread', this.loadSessions)
-    // ✅ 监听发送方主动触发的刷新
-    uni.$on('refreshSessions', this.loadSessions)
-    // 全局刷新事件订阅
-    uni.$on('refreshFriends', this.loadSessions)
-    uni.$on('refreshGroups', this.loadSessions)
+  computed: {
+    ...mapState('sessions', ['list']),   // 全局 list
+    defaultAvatar: () => '/static/default-avatar/xiaoqi.png'
   },
 
-  onUnload() {
-    // 避免重复绑定
-    uni.$off('refreshFriends', this.loadSessions)
-    uni.$off('refreshGroups', this.loadSessions)
-    uni.$off('refreshSessions', this.loadSessions)
-    uni.$off('clearUnread', this.loadSessions)
-    uni.$off("sessionsUpdated")
-
-
-    // 注销 WebSocket 回调
-    unregisterCmdHandler(205)
-    unregisterCmdHandler(207)
-    unregisterCmdHandler(201)
-    unregisterCmdHandler(203)
-    unregisterCmdHandler(204)
-    unregisterCmdHandler(101)
+  onShow() {
+    this.loadList()   // 兜底：切回来就拉一次
   },
 
   methods: {
-    // 获取最近会话（cmd=200）
-    loadSessions() {
-      fetchSessions((resp) => {
-        console.log('[Sessions] 最近会话:', resp.sessions)
-        this.users = (resp.sessions || []).map(s => ({
-          ...s,
-          // 标记未读：未读消息或存在待处理好友请求
-          hasUnread: (s.unread || 0) > 0 || (s.pendingFriendRequest || false)
-        }))
-      })
-    },
+    ...mapActions('sessions', ['loadList']),
     // 点击会话进入聊天
     connect(item) {
       let query = `?targetId=${item.sessionId}&type=${item.type}&name=${item.nickname}`
@@ -148,7 +74,8 @@ export default {
       const hours = dateObj.getHours().toString().padStart(2, '0')
       const minutes = dateObj.getMinutes().toString().padStart(2, '0')
       return `${hours}:${minutes}`
-    }
+    },
+
   }
 }
 </script>

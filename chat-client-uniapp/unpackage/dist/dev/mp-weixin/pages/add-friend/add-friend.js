@@ -10,9 +10,9 @@ const _sfc_main = {
   onLoad() {
     utils_socket.registerCmdHandler(202, (data) => {
       if (data.result === "pending") {
-        common_vendor.index.showToast({ title: "好友申请已发送", icon: "none" });
+        common_vendor.index.showToast({ title: `好友申请已发送`, icon: `none` });
       } else if (data.result === "fail") {
-        common_vendor.index.showToast({ title: "好友申请失败", icon: "none" });
+        common_vendor.index.showToast({ title: `好友申请失败`, icon: `none` });
       }
     });
   },
@@ -27,7 +27,6 @@ const _sfc_main = {
   },
   onUnload() {
     utils_socket.registerCmdHandler(202, null);
-    utils_socket.registerCmdHandler(207, null);
   }
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
