@@ -95,6 +95,18 @@
         LIMIT #{limit}
     </select>
 
+    <!-- 查询头像 -->
+    <select id="selectAvatarMap" resultType="map">
+        SELECT m.msg_id AS msgId,
+        u.avatar AS senderAvatar
+        FROM chat_message m
+        JOIN chat_user u ON u.user_id = m.from_user
+        WHERE m.msg_id IN
+        <foreach collection="list" item="item" open="(" separator="," close=")">
+            #{item.msgId}
+        </foreach>
+    </select>
+
 
     <!-- 通过游标id取到游标时间 -->
     <select id="getCreateTimeByMsgId" resultType="java.util.Date">
@@ -141,5 +153,7 @@
         WHERE group_id = #{groupId}
         LIMIT 1
     </select>
+
+
 
 </mapper>

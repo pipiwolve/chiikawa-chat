@@ -7,6 +7,7 @@ import org.tio.chat.model.ChatMessage;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 
 public interface ChatGroupMapper {
@@ -140,4 +141,11 @@ public interface ChatGroupMapper {
      * @return
      */
     String findOwnerId(@Param("groupId") String groupId);
+
+    /**
+     * 查询头像
+     * @param msgList
+     * @return
+     */
+    List<Map<String,String>> selectAvatarMap(@Param("list") List<ChatMessage> msgList);
 }

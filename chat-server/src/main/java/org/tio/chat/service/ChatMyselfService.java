@@ -18,4 +18,9 @@ public class ChatMyselfService {
     public boolean updateAvatar(String userId, String avatar) {
         return ChatMyselfMapper.updateAvatar(userId, avatar) > 0;
     }
+
+    public boolean updateGroupAvatar(String groupId, String avatar) {
+        return ChatMyselfMapper.updateGroupAvatar(groupId, avatar) > 0;
+
+    }
 }

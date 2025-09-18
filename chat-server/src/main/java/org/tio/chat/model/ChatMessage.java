@@ -53,4 +53,6 @@ public class ChatMessage implements Serializable {
 
     private String messageType;
     private String audioUrl;
+
+    private String senderAvatar;
 }

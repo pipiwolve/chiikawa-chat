@@ -72,7 +72,7 @@ export default {
     connect(item) {
       let query = ''
       if (item.userId) {
-        query = `?targetId=${item.userId}&type=private`
+        query = `?targetId=${item.userId}&friendAvatar=${item.avatar}&type=private`
         uni.navigateTo({
           url: '/pages/chat/chat' + query
         })

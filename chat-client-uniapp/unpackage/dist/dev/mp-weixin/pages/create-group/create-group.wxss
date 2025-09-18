@@ -9,6 +9,30 @@
 /* 垂直间距 */
 /* 透明度 */
 /* 文章场景相关 */
+.avatar-section.data-v-c3f8f667 {
+  position: relative;
+  margin-bottom: 60rpx;
+}
+.avatar.data-v-c3f8f667 {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 50%;
+  background: #f2f2f2;
+  /* 黑边突出 */
+  border: 6rpx solid #000;
+  /* 粗细可自己调 */
+  box-sizing: border-box;
+  /* 保证尺寸不变 */
+  box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.15);
+  /* 可选：一点投影更立体 */
+}
+.change-tip.data-v-c3f8f667 {
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  color: var(--text-desc);
+  letter-spacing: 0.5rpx;
+}
+
 /* ================ 视觉变量 ================ */
 .data-v-c3f8f667:root {
   --theme-start: #6366f1;

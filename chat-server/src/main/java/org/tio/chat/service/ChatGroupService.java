@@ -14,6 +14,7 @@ import org.tio.utils.lock.SetWithLock;
 import org.tio.websocket.common.WsResponse;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import com.github.pagehelper.PageHelper;
 
@@ -127,6 +128,27 @@ public class ChatGroupService {
     }
 
     /**
+     * 批量为群聊历史信息加入头像
+     * @param toReplay
+     * @return
+     */
+    public static List<ChatMessage> insertAvatarBatch(List<ChatMessage> toReplay) {
+        if (toReplay.isEmpty()) return toReplay;
+        try (SqlSession s = SQL_SESSION_FACTORY.openSession()) {
+            ChatGroupMapper mapper = s.getMapper(ChatGroupMapper.class);
+            // 1. 拿到 List<Map<String,Object>>
+            List<Map<String, String>> list = mapper.selectAvatarMap(toReplay);
+            // 2. 自己合并成 Map<msgId, avatar>
+            Map<String, String> avatarMap = list.stream()
+                    .collect(Collectors.toMap(
+                            m -> (String) m.get("msgId"),
+                            m -> (String) m.get("senderAvatar")));
+            toReplay.forEach(m -> m.setSenderAvatar(avatarMap.getOrDefault(m.getMsgId(), "")));
+            return toReplay;
+        }
+    }
+
+    /**
      * 获取群成员
      */
     public List<String> getGroupMembers(String groupId) {
@@ -163,7 +185,7 @@ public class ChatGroupService {
     /**
      * 获取群已读游标
      */
-    public String getLastReadCursor(String groupId, String userId) {
+    public static String getLastReadCursor(String groupId, String userId) {
         try (SqlSession sqlSession = SQL_SESSION_FACTORY.openSession(true)) {
             ChatGroupMapper groupMapper = sqlSession.getMapper(ChatGroupMapper.class);
             return groupMapper.getLastReadCursor(groupId, userId);
@@ -190,6 +212,7 @@ public class ChatGroupService {
 
         // 2) Redis 不足，回落 DB
         if ((toReplay == null || toReplay.isEmpty()) && lastCursor != null) {
+            lastCursor = ChatGroupService.getLastReadCursor(groupId, userId);
             toReplay = fetchGroupHistorySince(groupId, lastCursor, 200);
         }
 

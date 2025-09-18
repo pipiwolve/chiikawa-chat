@@ -1,6 +1,7 @@
 package org.tio.chat.handler;
 
 
+import org.checkerframework.checker.units.qual.C;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tio.chat.config.ChatServerConfig;
@@ -239,11 +240,12 @@ public class ChatWsHandler implements IWsMsgHandler {
                             chatMessage.getPageNum(),
                             chatMessage.getPageSize());
 
-                    history.forEach(m -> m.setType("group"));
+                    List<ChatMessage> historyWithAvatar = ChatGroupService.insertAvatarBatch(history);
+                    historyWithAvatar.forEach(m -> m.setType("group"));
 
                     Map<String, Object> payload = new HashMap<>();
                     payload.put("cmd", 103);
-                    payload.put("data", history);
+                    payload.put("data", historyWithAvatar);
 
                     WsResponse resp = WsResponse.fromText(JsonUtil.toJson(payload), ChatServerConfig.CHARSET);
                     Tio.sendToUser(channelContext.tioConfig, chatMessage.getFromUser(), resp);
@@ -254,10 +256,12 @@ public class ChatWsHandler implements IWsMsgHandler {
                     String groupId = chatMessage.getGroupId();
                     String userId = chatMessage.getFromUser();
                     List<ChatMessage> toReplay = ChatGroupService.replayGroupHistoryForWindow(userId, groupId);
-                    toReplay.forEach(t -> t.setType("group"));
+
+                    List<ChatMessage> toReplayWithAvatar = ChatGroupService.insertAvatarBatch(toReplay);
+                    toReplayWithAvatar.forEach(t -> t.setType("group"));
                     Map<String, Object> payload = new HashMap<>();
                     payload.put("cmd", 104);
-                    payload.put("data", toReplay);
+                    payload.put("data", toReplayWithAvatar);
                     WsResponse resp = WsResponse.fromText(JsonUtil.toJson(payload), ChatServerConfig.CHARSET);
                     Tio.sendToUser(channelContext.tioConfig, userId, resp);
                     break;

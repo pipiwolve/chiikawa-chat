@@ -18,7 +18,7 @@
           <!-- 接收方头像（左侧）-->
           <image
               v-if="item.fromUser !== userId"
-              :src="item.avatar || friendAvatar"
+              :src="item.senderAvatar || item.avatar || friendAvatar "
               class="avatar"
               mode="widthFix"
           />
@@ -128,7 +128,8 @@ export default {
       targetType: '',
       currentTargetName: '',
       selfAvatar: uni.getStorageSync('currentUserAvatar') || '/static/default-avatar/wusaqi.png',
-      friendAvatar: '/static/default-avatar/xiaoqi.png',
+      friendAvatar: '',
+      senderAvatar:'',
       connectionStatus: '未连接',
       scrollTop: 0,
       groupPageNum: 1,
@@ -164,7 +165,7 @@ export default {
     this.targetId = options.targetId;
     this.targetType = options.type;
     this.currentTargetName = options.name || options.nickname;
-    this.friendAvatar = options.avatar || this.friendAvatar;
+    this.friendAvatar = options.friendAvatar || '/static/default-avatar/wusaqi.png' ;
 
     uni.setNavigationBarTitle({
       title: this.currentTargetName || (this.targetType === 'group' ? '群聊' : '聊天')

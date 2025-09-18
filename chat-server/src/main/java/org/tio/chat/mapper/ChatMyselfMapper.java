@@ -13,4 +13,7 @@ public interface ChatMyselfMapper {
 
     @Update("UPDATE chat_user SET avatar = #{avatar} WHERE user_id = #{userId}")
     int updateAvatar(@Param("userId") String userId, @Param("avatar") String avatar);
+
+    @Update("UPDATE chat_group SET avatar = #{avatar} WHERE group_id = #{groupId}")
+    int updateGroupAvatar(@Param("groupId") String groupId, @Param("avatar") String avatar);
 }

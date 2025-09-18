@@ -14,7 +14,7 @@ const _sfc_main = {
     ...common_vendor.mapActions("sessions", ["loadList"]),
     // 点击会话进入聊天
     connect(item) {
-      let query = `?targetId=${item.sessionId}&type=${item.type}&name=${item.nickname}`;
+      let query = `?targetId=${item.sessionId}&type=${item.type}&name=${item.nickname}&friendAvatar=${item.avatar}`;
       common_vendor.index.navigateTo({
         url: "/pages/chat/chat" + query
       });

@@ -49,7 +49,8 @@
     <select id="getPrivateChatUsers" resultType="org.tio.chat.model.ChatUser">
         SELECT DISTINCT
             u.user_id AS userId,
-            u.username AS userName
+            u.username AS userName,
+            u.avatar
         FROM chat_user u
         WHERE u.user_id IN (
             SELECT DISTINCT
@@ -65,13 +66,13 @@
 
     <!-- 查询某个私聊对象的最后一条消息 -->
     <select id="selectLastPrivateMessage" resultType="org.tio.chat.model.ChatMessage">
-        SELECT from_user AS fromUser,
-               to_user   AS toUser,
-               content,
-               create_time AS createTime,
-               message_type as messageType,
-               extra as audioUrl
-        FROM chat_message
+        SELECT cm.from_user AS fromUser,
+               cm.to_user   AS toUser,
+               cm.content,
+               cm.create_time AS createTime,
+               cm.message_type as messageType,
+               cm.extra as audioUrl
+        FROM chat_message cm
         WHERE ((from_user = #{userId} AND to_user = #{peerId})
             OR (from_user = #{peerId} AND to_user = #{userId}))
           AND cmd = 2

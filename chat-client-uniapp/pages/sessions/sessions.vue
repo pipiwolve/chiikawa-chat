@@ -40,7 +40,7 @@ export default {
     ...mapActions('sessions', ['loadList']),
     // 点击会话进入聊天
     connect(item) {
-      let query = `?targetId=${item.sessionId}&type=${item.type}&name=${item.nickname}`
+      let query = `?targetId=${item.sessionId}&type=${item.type}&name=${item.nickname}&friendAvatar=${item.avatar}`
       uni.navigateTo({
         url: '/pages/chat/chat' + query
       })

@@ -15,6 +15,28 @@ public class UserController {
     @Autowired
     private ChatMyselfService chatMyselfService;
 
+    @PostMapping("/updateGroupAvatar")
+    public Map<String, Object> updateGroupAvatar(@RequestBody Map<String, String> body) {
+        String groupId = body.get("groupId");
+        String avatar = body.get("avatar");
+
+        Map<String, Object> resp = new HashMap<>();
+        if (groupId == null || avatar == null) {
+            resp.put("result", "fail");
+            resp.put("message", "参数缺失");
+            return resp;
+        }
+
+        boolean success = chatMyselfService.updateGroupAvatar(groupId, avatar);
+        if (success) {
+            resp.put("result", "ok");
+            resp.put("message", "头像更新成功");
+        } else {
+            resp.put("result", "fail");
+            resp.put("message", "更新失败，群组不存在");
+        }
+        return resp;
+    }
     /**
      * 更新用户头像
      */

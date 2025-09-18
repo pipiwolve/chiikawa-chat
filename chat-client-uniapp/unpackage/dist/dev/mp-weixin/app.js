@@ -46,11 +46,6 @@ const _sfc_main = {
       common_vendor.index.showToast({ title: "群聊列表已更新", icon: "none" });
       store_index.store.dispatch("groups/loadGroups", true);
     });
-    utils_socket.registerCmdHandler(203, (data) => {
-      common_vendor.index.showToast({ title: `群聊 ${data.groupName} 创建成功`, icon: `none` });
-      store_index.store.dispatch("groups/loadGroups", true);
-      store_index.store.dispatch("sessions/loadList", true);
-    });
     utils_socket.registerCmdHandler(204, (data) => {
       common_vendor.index.showToast({ title: `你已加入群聊 ${data.groupName}`, icon: `none` });
       store_index.store.dispatch("groups/loadGroups", true);
